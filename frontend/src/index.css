@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+:root {
+  font-family: Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color-scheme: light;
+  --background: #F8F9F7;
+  --foreground: #1B2420;
+  --card: #FFFFFF;
+  --card-foreground: var(--foreground);
+  --primary: #245747;
+  --primary-hover: #1B4538;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1F4F0;
+  --secondary-foreground: var(--foreground);
+  --muted: #F1F4F0;
+  --muted-foreground: #626962;
+  --caption: #717A74;
+  --accent: #EAF2ED;
+  --accent-foreground: var(--primary);
+  --border: #E8ECE8;
+  --input: var(--border);
+  --ring: var(--primary);
+  --warning: #805E27;
+  --negative: #A13D32;
+  --negative-hover: #7F3028;
+  --overlay: #1B242066;
+  --radius: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --text-caption: 12px;
+  --text-body: 14px;
+  --text-section: 18px;
+  --text-title: clamp(26px, 2.4vw, 30px);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-xl: var(--radius);
+}
+@layer base {
+  * { border-color: var(--border); }
+  body { margin: 0; min-width: 320px; background: var(--background); color: var(--foreground); }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+}
