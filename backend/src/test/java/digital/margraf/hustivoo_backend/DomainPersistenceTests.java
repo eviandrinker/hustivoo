@@ -132,6 +132,6 @@ class DomainPersistenceTests extends PostgresIntegrationTest {
         assertThat(business.getUpdatedAt()).isNotNull();
         flyway.validate();
         assertThat(flyway.info().pending()).isEmpty();
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("4");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("6");
     }
 }

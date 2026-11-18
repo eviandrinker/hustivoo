@@ -316,3 +316,171 @@ textarea.form-control { min-height: 112px; resize: vertical; }
   .crm-status-select { margin-left: 0; }
   .crm-tabs button { padding-inline: 12px; }
 }
+
+/* Service catalogue: the same quiet surfaces and controls as the CRM. */
+.service-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.service-name { display: grid; gap: 5px; min-width: 160px; max-width: 340px; }
+.service-name span { color: var(--muted-foreground); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.service-name strong { overflow-wrap: anywhere; }
+.service-price { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.service-toolbar > label { min-width: 160px; }
+@media (max-width: 560px) { .service-form-grid { grid-template-columns: 1fr; } }
+
+/* Refined catalogue workspace and editor. Other module dialogs retain their layout. */
+.services-page .page-header { margin-bottom: 24px; }
+.services-page .service-toolbar { gap: 12px; padding: 16px; margin-bottom: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+.services-page .service-toolbar > label { min-width: 140px; flex: 1; gap: 6px; color: var(--muted-foreground); }
+.services-page .service-toolbar > label:first-child { flex: 2; width: auto; }
+.services-page .service-toolbar .form-control { color: var(--foreground); height: 38px; min-height: 38px; font-size: 13px; }
+.services-page .data-table td { padding-block: 18px; }
+.services-page .service-name { gap: 4px; }
+.services-page .service-name strong { font-weight: 550; }
+.service-price { display: grid; gap: 3px; }
+.service-price small { color: var(--muted-foreground); font-size: 12px; }
+.service-actions-trigger { width: 36px; height: 36px; padding: 0; }
+.service-actions-popover { position: fixed; margin: 0; width: 192px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--foreground); box-shadow: 0 4px 14px #1b24200d; }
+.service-actions-popover .button { display: flex; width: 100%; justify-content: flex-start; gap: 10px; font-size: 13px; padding: 9px 10px; }
+.dialog-close-icon { flex: 0 0 32px; width: 32px; height: 32px; padding: 0; color: var(--muted-foreground); }
+.service-dialog { width: min(600px, calc(100% - 32px)); padding: 0; overflow: hidden; border-radius: 12px; }
+.service-dialog[open] { display: flex; flex-direction: column; }
+.service-dialog .dialog-heading { padding: 20px 24px 0; flex-shrink: 0; }
+.service-dialog h2 { font-size: 20px; letter-spacing: -.4px; }
+.service-dialog > p { margin: 4px 0 0; padding: 0 24px 20px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.service-dialog .dialog-body { margin: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.service-form { display: flex; flex-direction: column; min-height: 0; }
+.service-form-content { padding: 22px 24px; overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+.service-section { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 14px; }
+.service-section + .service-section { margin-top: 24px; }
+.service-section legend { padding: 0 0 14px; font-size: 12px; font-weight: 600; color: var(--primary); }
+.service-form .form-field label { font-size: 13px; font-weight: 450; }
+.service-form .form-control { min-height: 40px; font-size: 14px; }
+.service-form .form-control:not(:disabled):hover { border-color: var(--caption); }
+.service-form .form-control:focus-visible { outline-offset: 2px; border-color: var(--primary); }
+.service-form textarea.form-control { min-height: 76px; height: 76px; }
+.service-form-grid { gap: 14px 16px; }
+.service-price-input { position: relative; }
+.service-price-input > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted-foreground); pointer-events: none; }
+.service-price-input > input { padding-left: 52px; font-variant-numeric: tabular-nums; }
+.service-form-footer { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border); background: var(--card); }
+@media (max-width: 600px) {
+  .services-page .service-toolbar { padding: 12px; gap: 12px; }
+  .services-page .service-toolbar > label:first-child { flex-basis: 100%; }
+  .service-dialog { max-height: calc(100svh - 24px); width: calc(100% - 24px); }
+  .service-dialog .dialog-heading { padding: 16px 18px 0; }
+  .service-dialog > p { padding: 0 18px 16px; }
+  .service-form-content { padding: 18px; }
+  .service-form-grid { grid-template-columns: 1fr; }
+  .service-form-footer { padding: 14px 18px; }
+  .service-form-footer .button { flex: 1; padding-inline: 10px; }
+}
+
+/* Quotes: list, detail and editor reuse the catalogue's quiet surfaces and tokens. */
+.quotes-page .page-header, .quote-page .page-header { margin-bottom: 24px; }
+.quote-page > .text-link { margin-bottom: 12px; }
+.quotes-page .service-toolbar { gap: 12px; padding: 16px; margin-bottom: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+.quotes-page .service-toolbar > label { flex: 1; min-width: 160px; gap: 6px; color: var(--muted-foreground); }
+.quotes-page .service-toolbar > label:first-child { flex: 2; width: auto; }
+.quotes-page .service-toolbar .form-control { color: var(--foreground); height: 38px; min-height: 38px; font-size: 13px; }
+.quotes-page .data-table td { padding-block: 16px; }
+.quote-number-link { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; text-underline-offset: 3px; }
+.quote-number-link:hover { color: var(--primary); text-decoration: underline; }
+.quote-customer { display: block; min-width: 140px; max-width: 280px; overflow-wrap: anywhere; }
+.quote-dates { display: grid; gap: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.quote-dates small { color: var(--muted-foreground); font-size: 12px; }
+.quote-amount { font-weight: 550; white-space: nowrap; }
+.quote-row-actions { display: flex; gap: 2px; }
+.quote-row-actions .button { width: 34px; height: 34px; min-height: 34px; padding: 0; }
+.quote-status { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.quote-expired { padding: 2px 6px; border-radius: 4px; background: var(--muted); color: var(--warning); font-size: 11px; white-space: nowrap; }
+.quote-status-row { margin: -12px 0 20px; }
+.quote-actions { flex-wrap: wrap; justify-content: flex-end; }
+.quote-actions .button { gap: 6px; }
+.quote-delete { color: var(--negative); }
+
+.quote-editor, .quote-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.quote-editor-main { display: grid; gap: 20px; min-width: 0; }
+.quote-card { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 22px 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.quote-card h2, .quote-summary h2 { font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+.quote-card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.quote-card-heading span { color: var(--muted-foreground); font-size: 12px; }
+.quote-card .form-field { gap: 6px; }
+.quote-card .form-field label { font-size: 13px; font-weight: 450; }
+.quote-card .form-control:not(:disabled):hover { border-color: var(--caption); }
+.quote-card .form-control:focus-visible { border-color: var(--primary); outline-offset: 2px; }
+.quote-card textarea.form-control { min-height: 72px; }
+.quote-grid { display: grid; align-items: start; gap: 16px; }
+.quote-card input.form-control, .quote-card select.form-control { height: 40px; min-height: 40px; padding-block: 0; }
+.quote-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.quote-items { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.quote-item { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 14px 16px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); }
+.quote-item-head { display: flex; align-items: center; gap: 10px; }
+.quote-item-index { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); color: var(--primary); font-size: 12px; font-weight: 600; }
+.quote-item-source { color: var(--muted-foreground); font-size: 12px; }
+.quote-item-tools { display: flex; gap: 2px; margin-left: auto; }
+.quote-item-tools .button { width: 32px; height: 32px; min-height: 32px; padding: 0; color: var(--muted-foreground); }
+.quote-item-tools .button:not(:disabled):hover { color: var(--foreground); }
+.quote-item-tools .quote-item-remove:not(:disabled):hover { color: var(--negative); }
+.quote-card .quote-item textarea.form-control { min-height: 60px; }
+.quote-item-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, .7fr) minmax(0, 1.1fr); gap: 12px; align-items: end; }
+.quote-item-amount { display: grid; gap: 6px; padding-bottom: 10px; text-align: right; }
+.quote-item-amount span { color: var(--muted-foreground); font-size: 12px; }
+.quote-item-amount strong { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quote-empty-items { padding: 20px; border: 1px dashed var(--border); border-radius: 8px; background: var(--background); color: var(--muted-foreground); font-size: 13px; line-height: 1.6; text-align: center; }
+.quote-add { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.quote-add-catalog { display: grid; flex: 1 1 320px; gap: 6px; font-size: 13px; }
+.quote-add-catalog > div { display: flex; gap: 8px; }
+.quote-add-catalog select { flex: 1; min-width: 0; }
+.quote-add .button { gap: 6px; white-space: nowrap; }
+
+.quote-editor-aside { position: sticky; top: 24px; min-width: 0; }
+.quote-summary { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.quote-summary dl { display: grid; gap: 10px; margin: 0; }
+.quote-summary dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.quote-summary dt { color: var(--muted-foreground); }
+.quote-summary dt small { display: block; margin-top: 2px; font-size: 11px; }
+.quote-summary dd { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quote-summary .quote-summary-total { align-items: baseline; margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--border); }
+.quote-summary-total dt { color: var(--foreground); font-size: 14px; font-weight: 600; }
+.quote-summary-total dd { font-size: 20px; font-weight: 600; letter-spacing: -.4px; }
+.quote-summary-note { color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+.quote-summary-actions { display: grid; gap: 8px; }
+
+.quote-parties { grid-template-columns: minmax(0, 1fr) minmax(0, 260px); gap: 24px; }
+.quote-parties h2 { margin-bottom: 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+.quote-parties p { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.quote-party-name { font-weight: 600; }
+.quote-muted { color: var(--muted-foreground); }
+.quote-meta { display: grid; align-content: start; gap: 8px; margin: 0; }
+.quote-meta div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.quote-meta dt { color: var(--muted-foreground); }
+.quote-meta dd { font-variant-numeric: tabular-nums; text-align: right; }
+.quote-text { font-size: 14px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.quote-line-description { display: grid; gap: 3px; min-width: 200px; max-width: 420px; }
+.quote-line-description strong { font-weight: 550; overflow-wrap: anywhere; }
+.quote-line-description span { color: var(--muted-foreground); font-size: 12px; line-height: 1.5; white-space: pre-line; }
+.quote-notes p { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quote-readonly strong { color: var(--warning); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .quote-editor, .quote-detail-layout { grid-template-columns: minmax(0, 1fr); }
+  .quote-editor-aside { position: static; }
+}
+@media (max-width: 760px) {
+  .quote-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quote-item-amount { display: flex; grid-column: 1 / -1; justify-content: space-between; padding: 8px 0 0; border-top: 1px solid var(--border); }
+  .quote-grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quote-grid--3 > :last-child { grid-column: 1 / -1; }
+  .quote-parties { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .quotes-page .service-toolbar { padding: 12px; }
+  .quotes-page .service-toolbar > label:first-child { flex-basis: 100%; }
+  .quote-card { padding: 18px 16px; }
+  .quote-item { padding: 12px; }
+  .quote-grid--3 { grid-template-columns: minmax(0, 1fr); }
+  .quote-add-catalog > div { flex-direction: column; }
+  .quote-add .button { width: 100%; }
+  .quote-actions { justify-content: stretch; }
+  .quote-actions .button { flex: 1 1 auto; }
+  .quote-status-row { margin-top: 0; }
+}

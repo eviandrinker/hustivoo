@@ -41,29 +41,43 @@ export async function requestJson(path: string, options: RequestInit = {}): Prom
   const timeout = AbortSignal.timeout(10_000)
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   const response = await fetch(path, { ...options, headers, signal, credentials: 'same-origin' })
-  if (!response.ok) {
-    if (response.status === 403) {
-      clearCsrf()
-      // An expired session can first appear as a CSRF failure. Check identity,
-      // but never replay the mutation (it may have side effects).
-      if (path !== '/api/v1/auth/me') {
-        try { await requestJson('/api/v1/auth/me') } catch { /* 401 notifies the provider. */ }
-      }
-    }
-    if (response.status === 401 && path !== '/api/v1/auth/login') onUnauthorized?.()
-    let fields: Record<string, string> = {}
-    if (response.status === 400) {
-      try {
-        const body: unknown = await response.json()
-        if (typeof body === 'object' && body !== null && 'fields' in body &&
-            typeof body.fields === 'object' && body.fields !== null) {
-          fields = Object.fromEntries(Object.entries(body.fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-        }
-      } catch { /* Malformed errors remain safe generic errors. */ }
-    }
-    throw new ApiError(response.status, fields)
-  }
+  if (!response.ok) return fail(response, path)
   if (response.status === 204) return undefined
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Unexpected response')
   return response.json()
+}
+
+/** Shared failure handling: session expiry notification, CSRF reset and safe field errors. */
+async function fail(response: Response, path: string): Promise<never> {
+  if (response.status === 403) {
+    clearCsrf()
+    // An expired session can first appear as a CSRF failure. Check identity,
+    // but never replay the mutation (it may have side effects).
+    if (path !== '/api/v1/auth/me') {
+      try { await requestJson('/api/v1/auth/me') } catch { /* 401 notifies the provider. */ }
+    }
+  }
+  if (response.status === 401 && path !== '/api/v1/auth/login') onUnauthorized?.()
+  let fields: Record<string, string> = {}
+  if (response.status === 400) {
+    try {
+      const body: unknown = await response.json()
+      if (typeof body === 'object' && body !== null && 'fields' in body &&
+          typeof body.fields === 'object' && body.fields !== null) {
+        fields = Object.fromEntries(Object.entries(body.fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+      }
+    } catch { /* Malformed errors remain safe generic errors. */ }
+  }
+  throw new ApiError(response.status, fields)
+}
+
+/** Authenticated binary GET (e.g. PDF documents) with the same session and error handling as JSON requests. */
+export async function requestBlob(path: string, contentType: string, signal?: AbortSignal): Promise<Blob> {
+  if (!path.startsWith('/api/')) throw new Error('Expected a relative API path')
+  const headers = new Headers({ Accept: `${contentType}, application/json` })
+  const timeout = AbortSignal.timeout(30_000)
+  const response = await fetch(path, { headers, signal: signal ? AbortSignal.any([signal, timeout]) : timeout, credentials: 'same-origin' })
+  if (!response.ok) return fail(response, path)
+  if (!response.headers.get('content-type')?.startsWith(contentType)) throw new Error('Unexpected response')
+  return response.blob()
 }

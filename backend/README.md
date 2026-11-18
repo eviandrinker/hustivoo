@@ -254,3 +254,330 @@ Grenzen: Listen sind derzeit nicht paginiert; für grosse Datenbestände folgen
 Pagination und ggf. Suchindizes. Gleichzeitige Änderungen nutzen aktuell
 Last-Write-Wins; kein Audit-Log oder optimistischer Versionskonflikt. Die
 Kontaktverwaltung erstellt noch keine Rechnungen, Angebote oder Projekte.
+
+## Leistungskatalog
+
+Das Paket `digital.margraf.hustivoo_backend.servicecatalog` enthält `CatalogService`
+(JPA-Entity), Request-/Response-DTOs, Einheiten-/Sortier-Enums, Repository,
+`ServiceCatalogService`, Controller und einen auf diesen Controller begrenzten
+Exception-Handler. Bestehende Security-, Auth- und Business-Konfiguration bleibt
+unverändert.
+
+### Datenmodell und Migration
+
+`V5__create_services.sql` ist die nächste Migration nach V4; V1–V4 bleiben unverändert.
+Die Tabelle `services` hat UUID-IDs, `business_id` als Foreign Key, Name (255,
+Pflicht), Beschreibung (4000, optional), Kategorie (120, optional), Einheit,
+`unit_price NUMERIC(19,2)`, Währung (3 Zeichen, Default CHF),
+`tax_rate NUMERIC(5,2)` (optional), Aktivstatus (Default true) und Zeitstempel.
+Preise sind nicht negativ; Steuersätze liegen zwischen 0 und 100. Einheiten sind
+HOUR, DAY, FIXED, PIECE, MONTH. Indizes unterstützen Business-/Status-/Name-,
+Preis- und Kategorieabfragen. `(business_id, id)` ist zusätzlich eindeutig für
+spätere mandantengebundene Dokumentreferenzen. Hibernate bleibt auf `validate`.
+
+Alle Beträge sind in Java `BigDecimal`. Mehr als zwei Dezimalstellen werden per
+Bean Validation abgelehnt, nicht still gerundet. API-Antworten verwenden für
+Preis und Steuersatz **Dezimalstrings mit zwei Nachkommastellen**, damit JavaScript
+auch grosse Beträge exakt erhält. Die Eingabe erfolgt ebenfalls als Dezimalstring.
+Maximaler Preis: `99999999999999999.99`. Währungen werden normalisiert und mit
+`java.util.Currency` validiert. Leere optionale Texte werden null.
+
+### API
+
+Basis: `/api/businesses/{businessId}/services`.
+
+| Methode | Pfad | Ergebnis |
+| --- | --- | --- |
+| GET | Basis | Liste, standardmässig nur aktive Leistungen |
+| POST | Basis | 201, Response-DTO und Location |
+| GET | `/{serviceId}` | 200, auch für archivierte Leistungen |
+| PUT | `/{serviceId}` | 200, ersetzt bearbeitbare Felder |
+| PATCH | `/{serviceId}/archive` | 200, setzt active=false |
+| PATCH | `/{serviceId}/restore` | 200, setzt active=true |
+
+Listenparameter: `search` (max. 320, Teiltext in Name/Beschreibung, ohne Beachtung
+der Gross-/Kleinschreibung), `category` (max. 120, exakter Kategoriename ohne
+Beachtung der Gross-/Kleinschreibung), `active=true|false` (Default true),
+`sort=NAME_ASC|NAME_DESC|PRICE_ASC|PRICE_DESC` (Default NAME_ASC, ID als Tie-Breaker).
+Leere Suche/Kategorie bedeutet kein entsprechender Filter. Suchzeichen wie `%`
+und `_` sind Text, keine SQL-Wildcards. Preissortierung vergleicht die nominalen
+Beträge; es findet keine Währungsumrechnung statt.
+
+Beispiel für POST/PUT:
+
+```json
+{
+  "name": "Strategieberatung",
+  "description": "Analyse und Handlungsempfehlungen",
+  "category": "Beratung",
+  "unit": "HOUR",
+  "unitPrice": "95.00",
+  "currency": "CHF",
+  "taxRate": "8.10"
+}
+```
+
+Response: dieselben Felder plus `id`, `businessId`, `active`, `createdAt`,
+`updatedAt`. Optionaler Steuersatz bleibt null, wenn nicht gesetzt. `active` wird
+nur über Archivieren/Wiederherstellen geändert. Kein DELETE-Endpunkt.
+
+### Sicherheit und spätere Dokumente
+
+Jeder Service-Aufruf prüft zuerst die Membership über `BusinessService` und die
+Identität aus dem Security Context. OWNER und MEMBER dürfen lesen und schreiben.
+Alle Ressourcenzugriffe sind zusätzlich durch `businessId` eingeschränkt. Fremde
+und unbekannte Businesses/Leistungen erhalten dieselbe JSON-404-Antwort
+`{"error":"Service not found","fields":{}}`. Schreibzugriffe verwenden die
+bestehende Session-/CSRF-Konfiguration. Updates und Archivierung laufen in
+Transaktionen mit gesperrter Leistungszeile. DTOs enthalten keine User-ID zur
+Autorisierung. Validierungsfehler liefern 400 mit sicheren Feldmeldungen;
+Datenbankfehler werden ohne interne Details als 500 ausgegeben.
+
+Leistungs-IDs bleiben bei Preisänderung und Archivierung stabil. Künftige
+Angebots-/Rechnungspositionen müssen Beschreibung, Einheit, Preis, Währung und
+Steuersatz beim Erstellen als eigene Snapshots speichern und die Referenz über
+Business und Leistungs-ID absichern. Historische Dokumente dürfen nicht aus dem
+aktuellen Katalogpreis neu berechnet werden. Diese Dokumentmodule werden noch
+nicht implementiert.
+
+### Verifikation und Grenzen
+
+Vollständiger Maven-Testlauf: **59 Tests, 0 Fehler, 0 Fehlschläge, 0 übersprungen**.
+Davon 10 neue Testfälle mit PostgreSQL 17/Testcontainers: CRUD, Archivierung,
+Suche/Filter/Sortierung, Preisgrenzen und exakte BigDecimal-Persistenz,
+Validierung, Membership/IDOR/identische 404, Session/CSRF und V4→V5-Upgrade mit
+Bestandsdaten, Defaults und Foreign Keys. Der bestehende Schema-Versionstest
+wurde auf V5 aktualisiert; Flyway und Hibernate-Schemavalidierung bestehen.
+Der erste Lauf in der Sandbox konnte Docker nicht erreichen; der anschliessende
+Lauf mit Docker-Zugriff war erfolgreich. Keine neuen Abhängigkeiten oder Secrets.
+
+Die Liste ist noch nicht paginiert; für grosse Kataloge sollten Pagination und
+gegebenenfalls ein Suchindex ergänzt werden. Gleichzeitige Bearbeitungen werden
+serialisiert, aber es gibt noch keine optimistische Konfliktanzeige im Client.
+Steuersätze sind Katalogwerte, keine automatisierte Steuerberatung/-berechnung.
+
+## Angebotsverwaltung
+
+Paket `digital.margraf.hustivoo_backend.quote`: `Quote`/`QuoteItem` (JPA), `QuoteStatus`
+(Statusregeln), `QuoteCalculator` (Beträge), `QuoteService`, `QuoteController`,
+`QuotePdfRenderer` und ein auf den Controller begrenzter `QuoteExceptionHandler`.
+Security-, Auth-, Kunden- und Katalogmodule bleiben unverändert; der Service nutzt
+deren Repositories nur lesend.
+
+### Migration V6
+
+`V6__create_quotes.sql` (V1–V5 unverändert):
+
+- `quotes`: Kopf, Status, Datumsangaben, Währung, Texte, interne Notiz, Summen
+  `NUMERIC(19,2)`, Absender- und Kunden-Snapshot, `sent_at`/`decided_at`, Zeitstempel.
+  Constraints: `(business_id, customer_id)` → `customers(business_id, id)`,
+  eindeutige Nummer pro Business, Format `ANG-NNNN`, `valid_until >= issue_date`,
+  `grand_total = subtotal + tax_total`, Zeitstempel passend zum Status.
+- `quote_items`: Position, Beschreibung, Menge `NUMERIC(12,3)`, Einheit, Preis,
+  Steuersatz, Zeilenbeträge, optionale `service_id`. `(business_id, quote_id)` und
+  `(business_id, service_id)` sind zusammengesetzte Fremdschlüssel: Positionen können
+  nur auf Angebote und Leistungen desselben Businesses zeigen. `UNIQUE(quote_id, position)`
+  ist `DEFERRABLE`, damit Umsortieren in einer Transaktion möglich ist.
+- `quote_number_counters`: Zähler pro Business.
+- Trigger `quotes_guard`/`quote_items_guard` erzwingen die Statusregeln auch bei
+  direktem SQL: nur Entwürfe sind änderbar/löschbar, versendete Angebote nur noch
+  SENT → ACCEPTED/REJECTED ohne Inhaltsänderung, Positionen nur bei Entwürfen.
+
+### API
+
+Basis `/api/businesses/{businessId}/quotes`. Schreibende Aufrufe benötigen Session und CSRF.
+
+| Methode | Pfad | Ergebnis |
+| --- | --- | --- |
+| GET | Basis | 200, Liste (ohne Positionen/Notizen); `search` (≤320, Nummer/Kunde), `status` |
+| POST | Basis | 201 + Location, neuer Entwurf mit Nummer |
+| GET | `/{id}` | 200, vollständiges Angebot |
+| PUT | `/{id}` | 200, nur DRAFT (sonst 409); ersetzt Kopf und alle Positionen |
+| DELETE | `/{id}` | 204, nur DRAFT (sonst 409) |
+| PATCH | `/{id}/send` | DRAFT → SENT; 409 ohne Positionen |
+| PATCH | `/{id}/accept` | SENT → ACCEPTED |
+| PATCH | `/{id}/reject` | SENT → REJECTED |
+| GET | `/{id}/pdf` | 200 `application/pdf`, `attachment; filename="Angebot-ANG-0001.pdf"`, `no-store` |
+
+Request (POST/PUT):
+
+```json
+{
+  "customerId": "…", "issueDate": "2026-11-18", "validUntil": "2026-12-18", "currency": "CHF",
+  "introductionText": "…", "closingText": "…", "notes": "nur intern",
+  "items": [
+    { "serviceId": "…", "quantity": "1.5" },
+    { "description": "Hosting", "quantity": "12", "unit": "MONTH", "unitPrice": "29.00", "taxRate": "8.10" }
+  ]
+}
+```
+
+Mit `serviceId` übernimmt der Server fehlende Beschreibung, Einheit, Preis und
+Steuersatz aus dem Katalog (Steuersatz null → 0); mitgesendete Werte überschreiben
+sie (z. B. angepasster Preis). Freie Positionen brauchen alle Werte. `currency`
+fehlt → bisherige bzw. Business-Währung. Summen, Nummer, Status, Snapshots,
+Business- und User-IDs werden **nie** vom Client übernommen; unbekannte Felder wie
+`grandTotal` werden ignoriert und neu berechnet. Grenzen: 200 Positionen, Texte
+4000 Zeichen, Menge > 0 mit ≤ 3 Dezimalen (≤ 999'999'999.999), Preis ≥ 0 mit ≤ 2
+Dezimalen, Steuersatz 0–100, jeder Betrag ≤ 99'999'999'999'999'999.99.
+Beträge in Antworten sind Dezimalstrings; zusätzlich `taxGroups` (Basis und Steuer pro Satz).
+
+Fehler: 400 `{"error":"Invalid request","fields":{…}}` mit Feldschlüsseln wie
+`items[0].unitPrice`; 404 `{"error":"Quote not found","fields":{}}`; 409 mit
+`Quote is not editable`, `Invalid status transition`, `Quote has no items`.
+
+### Statusregeln
+
+```
+DRAFT ──send──▶ SENT ──accept──▶ ACCEPTED (final)
+  │                └──reject──▶ REJECTED (final)
+  └─ bearbeiten / löschen nur hier
+```
+
+Nur Entwürfe sind bearbeit- und löschbar (gelöschte Nummern werden nicht neu vergeben).
+Versendete Angebote werden nicht gelöscht, sondern angenommen oder abgelehnt.
+Angenommene/abgelehnte Angebote sind unveränderlich – geprüft im Service (409) und
+zusätzlich per Datenbanktrigger. Ein abgelaufenes SENT-Angebot kann bewusst noch
+angenommen werden (späte Zusage); die Oberfläche kennzeichnet es als „Abgelaufen“.
+Gleichzeitige Änderungen sind über eine Zeilensperre serialisiert.
+
+### Nummernvergabe
+
+`ANG-0001`, `ANG-0002`, … pro Business über
+`INSERT … ON CONFLICT DO UPDATE … RETURNING` auf `quote_number_counters` in derselben
+Transaktion wie das Angebot. Die Zeilensperre serialisiert parallele Anfragen; bei
+Rollback wird der Zähler mit zurückgerollt. Validierung erfolgt vor der Vergabe, ungültige
+Anfragen verbrauchen keine Nummer. Ab 10'000 wird die Nummer länger (`ANG-10000`).
+
+### Snapshots und Mandantentrennung
+
+Jede Position speichert Beschreibung, Einheit, Preis, Steuersatz und Zeilenbeträge;
+spätere Katalogänderungen oder Archivierungen wirken sich nicht aus. Kunden-Snapshot
+(Nummer, Name, Firma, Kontakt, Adresse, Land, E-Mail) und Absendername werden bei jedem
+Speichern eines Entwurfs und ein letztes Mal beim Versand aktualisiert, danach eingefroren.
+Archivierte Kunden/Leistungen bleiben in Entwürfen, die sie bereits verwenden, erlaubt,
+können aber nicht neu gewählt werden. Leistungen in fremder Währung sind nur mit
+explizitem Preis erlaubt.
+
+Jeder Aufruf prüft zuerst die Membership aus dem Security Context (`BusinessService`);
+OWNER und MEMBER haben gleiche Rechte. Angebote, Kunden und Leistungen werden nur über
+ID **und** Business-ID geladen. Fremde und unbekannte Angebote/Businesses liefern
+byte-identische 404-Antworten (auch für den PDF-Download); fremde und unbekannte
+Kunden-/Leistungs-IDs im Body identische 400-Antworten.
+
+### Berechnung und Rundung
+
+`QuoteCalculator`, ausschliesslich `BigDecimal`:
+
+1. `lineSubtotal = quantity × unitPrice`, kaufmännisch (HALF_UP) auf die kleinste Einheit der Währung
+2. `lineTax = lineSubtotal × taxRate / 100`, ebenso gerundet
+3. `lineTotal = lineSubtotal + lineTax`
+4. `subtotal`/`taxTotal` = exakte Summe der gerundeten Zeilen; `grandTotal = subtotal + taxTotal`
+
+Rundung pro Zeile, damit gedruckte Zeilen und Summen immer übereinstimmen. Kleinste
+Einheit nach ISO 4217: CHF/EUR/USD/GBP 0.01, JPY 1 (gespeichert als `.00`). Währungen mit
+drei Nachkommastellen (z. B. KWD) werden abgelehnt. **Keine 5-Rappen-Rundung** für CHF:
+Angebote und spätere Überweisungen/QR-Rechnungen sind rappengenau; eine
+Bargeldrundung wäre eine separate Rechnungsfunktion. Hinweis: Die MWST pro Zeile kann
+um wenige Rappen von einer Berechnung auf der Satzsumme abweichen.
+
+### PDF
+
+Apache PDFBox 3.0.8 (Apache-2.0) ist die einzige PDF-Abhängigkeit. Der Renderer verwendet
+ausschliesslich Snapshot-Daten des Angebots und die gespeicherten Serverbeträge; er
+formatiert, rechnet aber nie neu. Versendete Angebote behalten dadurch exakt ihren Inhalt.
+
+**Aufbau** (`digital.margraf.hustivoo_backend.document`, wiederverwendbar für Rechnungen):
+
+| Klasse | Aufgabe |
+| --- | --- |
+| `DocumentTheme` | Primär-/Sekundärfarbe, Text-, Linien- und Warnfarben, optionale Fusszeilennotiz; `hustivoo()` als Standard |
+| `DocumentSender` | Absendername, Adress- und Kontaktzeilen, Logo (PNG/JPEG); leere Angaben entfallen |
+| `DocumentFonts` | Eingebettete Inter-Fonts, Zeichenprüfung, Fallback |
+| `PdfCanvas` | Seiten, Text, Umbruch ohne Abschneiden, Linien, Bilder |
+
+`QuotePdfRenderer.render(quote, sender, theme, homeCountry)` ist der Einstiegspunkt für
+späteres Branding (Logo, Farben, Fusszeile). Heute liefert `render(quote, business)` den
+Snapshot-Absendernamen mit dem Hustivoo-Theme; eine Einstellungsseite gibt es bewusst nicht.
+
+**Layout (A4):** Ränder 22 mm. Briefkopf mit Unternehmensname (bei Bedarf Logo,
+Adresse, Kontakt) links und gesperrtem „ANGEBOT“, Nummer und dezentem „ENTWURF“-Label
+rechts. Darunter zwei ausbalancierte Spalten „Empfänger“ (Name, Firma, Kontakt, Adresse,
+Land bei Auslandskunden, Kundennummer) und „Angebotsdetails“ (Nummer, Datum, Gültigkeit,
+Währung). Betreffzeile „Angebot für …“, Einleitung mit lesefreundlicher Zeilenlänge.
+Die Tabelle hat dezente Versalien-Spaltenköpfe, eine dunkle Haarlinie, hellgraue
+Zeilentrenner, keine Zellrahmen, rechtsbündige Beträge und zweistufige Beschreibungen
+(erste Zeile fett, Details grau). Die Zahlenspalten werden pro Dokument an den längsten
+Wert angepasst, Beträge werden nie abgeschnitten. Summenblock: Zwischensumme, MWST je
+Satz („MWST 8.1 % auf 951.00“, bei steuerfreien Angeboten „MWST CHF 0.00“), dunkelgrüne
+Linie, „Total“ gross und fett, Hinweis „Gültig bis … · Beträge in CHF“. Danach folgt der
+Abschlusstext, nur wenn gespeichert. Interne Notizen erscheinen nie. Die Fusszeile
+enthält Unternehmensname, optionale Kontakt-/Zahlungsangaben (bis zwei Zeilen, Einträge
+werden nie getrennt), „Angebot ANG-…“ und „Seite X von Y“. Metadaten: Titel, Betreff,
+Autor, Sprache de-CH.
+
+**Seitenfluss:** Seiten entstehen erst, wenn Inhalt gezeichnet wird, daher gibt es keine
+leeren Seiten.
+- Der Tabellenkopf steht nie allein, sondern immer mit dem Beginn einer Position.
+- Positionen bleiben zusammen. Nur eine Position, die höher als eine Seite ist, wird
+  zeilenweise umbrochen; Wörter werden dabei nie getrennt.
+- Folgeseiten haben einen schlanken Laufkopf, den wiederholten Tabellenkopf und
+  „Übertrag von Seite N“. Das Seitenende zeigt „Übertrag“ als exakte Summe der bis dahin
+  gedruckten Positionsbeträge.
+- Summenblock und ein kurzer Abschlusstext (bis 6 Zeilen) werden zusammengehalten.
+- Inhalt endet mindestens 28 pt über der Fusslinie.
+
+**Typografie:** Inter 4.1 (Regular, SemiBold, Bold) unter der SIL Open Font License 1.1,
+mitgeliefert unter `src/main/resources/fonts/inter/` inklusive `OFL.txt`. Die Fonts
+werden als Subset eingebettet; zur Laufzeit wird nichts nachgeladen und kein
+System-Font verwendet. Abgedeckt sind alle europäischen Lateinschriften (Umlaute,
+französische Akzente, Ł, Ș/Ț, Ő/Ű, Æ/Ø …), Griechisch, Kyrillisch, €, typografische
+Anführungszeichen und Striche. Fallback: zuerst NFC-Normalisierung, dann Zerlegung in
+Grundbuchstabe plus Akzent. Nicht darstellbare Zeichen werden sichtbar als „?“ gedruckt
+und mit Code-Point (ohne Text) als WARN geloggt, also nicht stillschweigend ersetzt.
+
+### Bekannte Einschränkungen
+
+- Businesses speichern weder Adresse noch Logo, Kontaktangaben, UID oder
+  Bankverbindung. Das PDF zeigt deshalb nur den Unternehmensnamen; nichts wird erfunden.
+  Renderer und `DocumentSender` unterstützen diese Angaben bereits, sobald das
+  Business-Modell sie liefert.
+- CJK, Emoji und rechts-nach-links-Schriften (Hebräisch, Arabisch) deckt Inter nicht ab.
+  Sie erscheinen als „?“ mit Log-Warnung. PDFBox setzt kein RTL und keine Ligaturen,
+  deshalb wurde bewusst kein unvollständiger Zweitfont ergänzt. Echte Unterstützung
+  bräuchte einen Noto-CJK/RTL-Font und Text-Shaping.
+- Ohne OpenType-Features: Inter-Ziffern sind proportional, nicht tabellarisch. Die
+  Beträge sind rechtsbündig, Dezimalpunkte können minimal versetzt stehen. Kerning
+  wird nicht angewendet.
+- Die Empfängeradresse steht links, ohne Fensterkuvert-Raster nach SN 010130. Das
+  Layout ist auf den digitalen Versand ausgelegt.
+- Bei extrem grossen Mengen oder Beträgen wird die Beschreibungsspalte schmaler,
+  weil Beträge Vorrang haben.
+- Keine Paginierung der Liste, keine Rabatte, keine Duplizier-/Rechnungsumwandlung,
+  kein E-Mail-Versand („gesendet“ ist eine manuelle Markierung).
+- Angebotssprache und Formate sind Deutsch/Schweiz.
+
+### Tests
+
+`QuoteTests` (PostgreSQL 17 via Testcontainers, 10 Tests): Erstellen/Bearbeiten mit
+Katalog- und freien Positionen, ignorierte Client-Summen, Umsortieren/Entfernen;
+Rundung (HALF_UP, Rappen, JPY, Summe gerundeter Zeilen); Validierung inkl. Grenzen,
+ohne Nummernverbrauch; Statusübergänge inkl. Datenbanktrigger; Snapshots bei Preis-,
+Katalog- und Kundenänderungen; IDOR/identische 404/400, Fremdreferenzen, MEMBER;
+Session/CSRF; 16 parallele Erstellungen → `ANG-0001…0016` lückenlos und eindeutig;
+PDF-Download (Header, Textinhalt, keine Notizen, Sonderzeichen, mehrseitig);
+Upgrade V5 → V6 mit Bestandsdaten und Constraints. `DomainPersistenceTests` prüft
+jetzt V6; der Katalog-Upgradetest migriert gezielt bis V5.
+
+`QuotePdfLayoutTests` (12 Tests, ohne Datenbank, auf echten PDFs): 0/1/5/20/50 Positionen,
+Seitenzahl, Ränder, keine Inhalte in der Fusszone, keine überlappenden Glyphen, kein
+verwaister Tabellenkopf, keine leeren Seiten, wiederholter Tabellenkopf, Übertrag gleich
+der Summe der gedruckten Beträge, sehr lange Beschreibungen, Namen und Adressen ohne
+Textverlust, gemischte und fehlende Steuersätze mit exakten Beträgen, europäische
+Sonderzeichen mit eingebetteten Inter-Fonts, sichtbarer Fallback für CJK/Emoji,
+ausschliesslich Snapshot-Daten (kein Live-Business-Name, keine Notizen), Entwurfsmarke,
+Logo-, Kontakt- und Theme-Hooks, defektes Logo, ungekürzte Zahlungsangaben in der
+Fusszeile. Mit `-Dquote.pdf.out=<Verzeichnis>` werden alle Test-PDFs zur Sichtprüfung
+abgelegt.
+
+Ergebnis `./mvnw verify`: **81 Tests, 0 Fehler, 0 Fehlschläge**.

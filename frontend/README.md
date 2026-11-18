@@ -280,3 +280,155 @@ Filter, Validierung, unerwartete Antworten, Lade-/Netzwerkfehler sowie Cleanup u
 verspätete Antworten beim Business-Wechsel/Logout ab. Keine neuen Abhängigkeiten.
 Browser-/DOM-Tests wurden nicht durchgeführt; Kontakt-Dialoge, Tabs, mobile
 Darstellung und vollständige Abläufe mit realem Backend sind noch manuell zu prüfen.
+
+## Leistungskatalog (`/services`)
+
+Die neue Sidebar-Seite „Leistungen“ nutzt AppLayout, BusinessProvider und die
+vorhandenen Controls, Tabelle, Dialoge und Design-Tokens. Sie bietet echte,
+mandantengebundene Leistungen mit Suche nach Name/Beschreibung, Kategorie- und
+Aktiv-/Archivfilter, Sortierung nach Name/Preis sowie Erstellen, Bearbeiten,
+Archivieren mit Bestätigung und Wiederherstellen. Keine Produkt-Mockdaten.
+
+- `src/api/services.ts`: typisierte DTOs, Runtime-Validierung und vorhandener
+  Session-/CSRF-Client; alle sechs Backend-Endpunkte unter
+  `/api/businesses/{businessId}/services`. Responses müssen zur erwarteten
+  Business-/Leistungs-ID passen. Schreib-Payloads enthalten nur erlaubte Felder.
+- `src/services/store.ts`: Liste, Filter und getrennte Lade-/Fehlerzustände;
+  neueste Leseantwort gewinnt. Mutationen werden niemals automatisch wiederholt.
+- `src/services/ServiceForm.tsx`: responsiver Dialoginhalt mit deutschen Labels,
+  optionalen Feldern, feldbezogenen Fehlern und Fokus auf dem ersten Fehler.
+- `src/services/ServiceResults.tsx`: unabhängig testbare Tabellen-, Leer-, Lade-
+  und Fehlerdarstellung.
+- `src/services/validation.ts`: Normalisierung, Backend-Limits, Einheitenlabels
+  und exakte Preisformatierung ohne Gleitkommazahlen.
+- `src/pages/ServicesPage.tsx`: businessgebundener Workspace und Dialogabläufe.
+
+Preise und Steuersätze bleiben Dezimalstrings vom Eingabefeld bis zur API.
+Kommas werden als Dezimaltrenner akzeptiert und in Punkte normalisiert. Preis:
+0 bis 99999999999999999.99, maximal zwei Dezimalstellen. Steuersatz: optional,
+0–100, maximal zwei Dezimalstellen. CHF ist die Standardwährung; Vorschläge
+umfassen CHF/EUR/USD/GBP, weitere dreistellige Codes können eingegeben werden;
+die ISO-Gültigkeit prüft das Backend. Die Tabelle zeigt Nettopreise. Der
+Kategoriefilter sucht den vollständigen Kategorienamen ohne Beachtung der
+Gross-/Kleinschreibung. Preissortierung beinhaltet keine Währungsumrechnung.
+
+Business-Wechsel remountet die Seite und entfernt sofort Liste, Filter und
+Dialogeingaben. Unmount/Logout leert den Store und invalidiert verspätete Lese-
+und Schreibantworten. Keine Leistungsdaten werden im Browser persistiert.
+Die Business-Auswahl ersetzt niemals die serverseitige Autorisierung.
+Schlägt das Nachladen nach einem bestätigten Schreibvorgang fehl, zeigt die Seite
+Erfolgsfeedback und separat den Ladefehler mit Retry; es wird nicht erneut geschrieben.
+
+Verifikation: **48 Frontend-Tests bestanden**, darunter 15 neue API-/State-/
+Validierungs- und React-Render-Tests. ESLint, TypeScript (`tsc -b`) und
+Vite-Production-Build erfolgreich. Die Render-Tests verwenden Reacts vorhandenen
+Server-Renderer ohne zusätzliche Abhängigkeiten. Sie prüfen echte Komponenten,
+aber keine interaktiven DOM-/Browserabläufe.
+
+Noch manuell im Browser mit laufendem Backend prüfen:
+
+1. Als OWNER und MEMBER Leistung erstellen, bearbeiten, archivieren und
+   wiederherstellen; Preise und Steuersatz nach Reload vergleichen.
+2. Suche, vollständige Kategorie, Status und alle Sortierungen; leere Ergebnisse.
+3. Dialog mit Tab/Shift+Tab/Escape, Labels, Fehlerfokus, Disabled-/Loading-Zustände
+   und Screenreader; keine doppelten Aktionen durch mehrfaches Klicken.
+4. Business-Wechsel und Logout bei langsamem Laden oder Speichern, danach
+   Session-Wiederherstellung und direkter Aufruf von `/services`.
+5. Netzwerkausfall, ungültige CSRF-Anfrage und abgelaufene Session; keine
+   versehentlichen doppelten Schreibvorgänge beim erneuten Laden.
+6. Smartphone (375px), Tablet (768px) und Desktop: Dialoghöhe, Tabelle mit
+   horizontalem Scrollen, lange Namen und mobile Sidebar.
+
+Es wurde keine Browserprüfung durchgeführt. Der Katalog ist nicht paginiert;
+Angebote, Rechnungen, Preis-Snapshots und automatische Steuerberechnung sind
+bewusst noch nicht implementiert. Authentifizierung, Onboarding und CRM bleiben
+funktional unverändert. Keine neuen Abhängigkeiten, Commits oder Pushes.
+
+### UI/UX-Überarbeitung des Leistungskatalogs
+
+Der Leistungseditor verwendet einen maximal 600px breiten Dialog mit dem Titel
+„Neue Leistung“ bzw. „Leistung bearbeiten“, kurzem Untertitel und beschriftetem
+X-Button. Die Abschnitte „Allgemein“ und „Preisgestaltung“ ordnen die Felder;
+zusammengehörige Preisfelder stehen maximal zweispaltig, auf Smartphones
+untereinander. Die Beschreibung bleibt kompakt. Der Preis zeigt die jeweils
+gewählte Währung als Präfix; Eingabewerte, Normalisierung und API bleiben unverändert.
+Es werden keine Steuersätze vorbelegt.
+
+Der Formularinhalt scrollt unabhängig von Dialogkopf und Footer. Der Footer
+enthält „Abbrechen“ und den jeweiligen Speichern-Button. Der Fokus startet im
+Namensfeld; das native Dialogelement begrenzt den Tastaturfokus und stellt ihn
+beim Schliessen wieder her. X, Escape und Abbrechen schützen laufende Speicherung.
+Bei geänderten Eingaben fragt eine native Bestätigung vor dem Verwerfen nach;
+bei abgelehntem Verwerfen und fehlgeschlagenem Speichern bleiben die Eingaben erhalten.
+Der gemeinsame Dialog erhielt nur optionale Eigenschaften; andere Module behalten
+ihr bisheriges Layout und Verhalten.
+
+Die Liste bietet kompaktere Filter, gruppierte Namen/Beschreibungen und Preis mit
+Einheit in einer Spalte. `ServiceActions.tsx` verwendet ein natives Popover mit
+beschriftetem Drei-Punkte-Button und normalen, per Tab erreichbaren Aktionen.
+Das Popover liegt ausserhalb des Tabellen-Clippings; Escape und Klick ausserhalb
+schliessen es. Es benötigt einen aktuellen Browser mit Popover-Unterstützung.
+
+Ergänzte Render-Tests prüfen Abschnitte, Footer, Preisfeld-Zuordnung, Währungspräfix,
+Popover-Trigger und deaktiviertes Dialog-X. Alle 51 Frontend-Tests bestanden.
+Die Tests simulieren keine echten Browserinteraktionen. Manuell noch prüfen:
+
+- Desktop und Smartphone: Kopf/Footer bei wenig Bildschirmhöhe sichtbar,
+  Formular scrollbar, Tabelle horizontal erreichbar.
+- Tab/Shift+Tab im Dialog und Aktions-Popover; Öffnen per Enter/Leertaste,
+  Escape, Klick ausserhalb des Popovers und Fokus nach dem Schliessen.
+- Änderungen eingeben und X/Escape/Abbrechen betätigen: Verwerfen ablehnen und
+  bestätigen; während Speicherung dürfen diese Aktionen nicht schliessen.
+- Währung wechseln, Dezimalkomma und grosse Preise speichern, Validierungsfehler
+  und Serverfehler auslösen; Eingaben müssen erhalten bleiben.
+- Archivieren und Wiederherstellen über das Popover, einschliesslich letzter
+  Tabellenzeile und schmaler Viewports.
+
+Keine Browserprüfung durchgeführt. Backend, API, Mandantentrennung und
+Preisverarbeitung wurden für diese visuelle Überarbeitung nicht geändert.
+
+## Angebotsverwaltung
+
+Routen: `/quotes` (Liste), `/quotes/new`, `/quotes/:id` (Detail), `/quotes/:id/edit`.
+Neuer Navigationseintrag „Angebote“. Dateien: `src/api/quotes.ts`, `src/quotes/*`,
+`src/pages/Quote*.tsx`; `api/client.ts` erhielt `requestBlob` für den PDF-Download mit
+derselben Session-/Fehlerbehandlung wie JSON-Requests. Keine neuen Abhängigkeiten.
+
+- **Liste**: Suche (Nummer/Kunde), Statusfilter, Tabelle mit Nummer, Kunde, Datum
+  (+ Gültigkeit), Betrag, Status (inkl. „Abgelaufen“), Aktionen Öffnen, Bearbeiten
+  (nur Entwürfe), PDF. Lade-, Leer-, Filter- und Fehlerzustände; keine Mock-Daten.
+- **Editor**: Kunde (nur aktive Kunden; ein archivierter Kunde eines Entwurfs bleibt
+  wählbar), Datum/Gültigkeit (Default +30 Tage), Währung, Positionen aus dem Katalog
+  (nur gleiche Währung) oder frei, Menge/Einheit/Preis/MWST bearbeiten, sortieren,
+  entfernen, Einleitung, Abschluss, interne Notiz. Rechts (mobil darunter) eine
+  Zusammenfassung. Desktop zweispaltig, ab 1100px einspaltig, Positionsfelder ab 760px
+  zweispaltig. Warnung bei ungespeicherten Änderungen (Abbrechen/Tab schliessen).
+- **Detail**: Dokumentansicht mit Serverbeträgen, interne Notiz separat, Aktionen
+  je Status mit Bestätigungsdialog (Senden, Annehmen, Ablehnen, Löschen), PDF.
+
+Beträge bleiben Dezimalstrings. `quotes/money.ts` berechnet eine **Vorschau** exakt mit
+BigInt nach derselben Regel wie der Server (HALF_UP pro Zeile); gespeicherte Werte
+kommen immer vom Server, der Client sendet nie Summen. Antworten werden streng
+geprüft (Business-ID, ID, Geldformat). Stores verwerfen späte Antworten per Epoch;
+Business-Wechsel leert die Liste sofort und führt von Detail/Editor zurück zu
+`/quotes`; Logout entfernt alle Angebotsdaten (Unmount + `clear()`), späte PDF-Antworten
+werden nicht mehr gespeichert.
+
+Tests: `tests/quotes.test.mjs` (API, Whitelisting, CSRF, PDF, Berechnungen, Validierung,
+Stores inkl. Business-Wechsel/Logout) und `tests/quotes-view.test.mjs` (Liste, Editor,
+Kunden-/Leistungsauswahl, Statusaktionen, Detail). Gesamt **68 Tests bestanden**;
+ESLint, TypeScript und Production-Build erfolgreich.
+
+Zusätzlich wurde eine isolierte Vorschau (Wegwerf-DB) im Headless-Browser geprüft:
+Liste, Detail, Editor (Desktop und 390px ohne horizontales Scrollen), Hinzufügen einer
+Katalogleistung und Speichern – Vorschau- und Serversumme stimmten überein.
+
+Manuell noch prüfen:
+
+1. Tastatur: Editor komplett per Tab, Positionen sortieren/entfernen (Fokus), Dialoge mit Escape.
+2. Screenreader: Positionsgruppen („Position n“), Fehlermeldungen, Summen-Live-Region.
+3. PDF-Download in Safari, Firefox und Chrome; Dateiname, Öffnen, Druckbild.
+4. Business-Wechsel und Logout während Laden, Speichern und PDF-Erstellung.
+5. Zwei Tabs: Entwurf in Tab A bearbeiten, in Tab B senden, in A speichern → Hinweis 409.
+6. Abgelaufene Session/CSRF-Fehler beim Speichern; Netzwerkausfall.
+7. Tablet (768px) und sehr lange Kundennamen/Beschreibungen; viele Positionen.
