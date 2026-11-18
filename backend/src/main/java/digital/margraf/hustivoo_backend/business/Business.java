@@ -19,6 +19,15 @@ public class Business {
     @Column(nullable = false, length = 3)
     private String currency;
 
+    @Column(length = 120)
+    private String industry;
+
+    @Column(name = "legal_form", length = 120)
+    private String legalForm;
+
+    @Column(nullable = false, length = 2)
+    private String country;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -34,7 +43,14 @@ public class Business {
     }
 
     public Business(String name, String currency) {
+        this(name, null, null, "CH", currency);
+    }
+
+    public Business(String name, String industry, String legalForm, String country, String currency) {
         rename(name);
+        this.industry = industry;
+        this.legalForm = legalForm;
+        this.country = java.util.Objects.requireNonNull(country);
         this.currency = java.util.Currency.getInstance(java.util.Objects.requireNonNull(currency)).getCurrencyCode();
     }
 
@@ -43,6 +59,9 @@ public class Business {
         if (this.name.isBlank()) throw new IllegalArgumentException("Business name is required");
     }
 
+    public String getIndustry() { return industry; }
+    public String getLegalForm() { return legalForm; }
+    public String getCountry() { return country; }
     public UUID getId() { return id; }
     public String getName() { return name; }
     public String getCurrency() { return currency; }

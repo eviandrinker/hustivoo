@@ -136,3 +136,65 @@ registration responses, normalization, hashing, duplicate and concurrent signup,
 validation, generic credential failures, session persistence/rotation, old cookie
 rejection, logout, protected API paths and public health access. The original
 health slice test isolates the controller; integration tests exercise real filters.
+
+## Business-Onboarding und Mandantentrennung
+
+Die neuen Endpunkte verwenden bewusst den angeforderten Pfad `/api/businesses`.
+Die bestehenden Auth-Endpunkte bleiben unter `/api/v1/auth`.
+
+| Methode / Pfad | Verhalten |
+| --- | --- |
+| POST `/api/businesses` | 201 mit Business-DTO und `Location`; legt automatisch OWNER-Membership an |
+| GET `/api/businesses` | 200 mit Array ausschliesslich eigener Membership-Unternehmen; sonst `[]` |
+| GET `/api/businesses/{id}` | 200 bei Membership, sonst 404 |
+
+Beispiel für POST (Session-Cookie und gültigen `X-CSRF-TOKEN` mitsenden):
+
+```json
+{
+  "name": "Studio Beispiel",
+  "industry": "Design",
+  "legalForm": "Einzelfirma",
+  "country": "CH",
+  "currency": "CHF"
+}
+```
+
+`name` ist erforderlich und auf 255 Zeichen begrenzt. `industry` und `legalForm`
+sind optionale Freitexte mit maximal 120 Zeichen; leere Werte werden zu null.
+Land und Währung sind ISO-Codes, werden getrimmt und grossgeschrieben. Fehlende
+oder null-Werte erhalten CH beziehungsweise CHF; explizit leere oder ungültige
+Codes werden abgelehnt. Die Länder-/Währungskombination wird nicht eingeschränkt.
+Das Response-DTO enthält ausschliesslich id, name, industry, legalForm, country,
+currency, createdAt und updatedAt, keine Benutzer oder Membership-Entities.
+
+`BusinessService` ermittelt die Identität bei jedem Aufruf aus dem Security
+Context und prüft, dass der Benutzer noch existiert. Weder Request-Body noch
+Query-Parameter oder Header liefern die autorisierende User-ID. Business und
+OWNER-Membership werden in derselben Transaktion gespeichert; schlägt eine
+Operation fehl, wird beides zurückgerollt. Auch direkte Service-Aufrufe prüfen
+die Identität; Leseabfragen filtern bereits in der Datenbank nach Membership.
+OWNER und MEMBER dürfen lesen. Es gibt keine administrativen Ausnahmen.
+
+Fremde und unbekannte IDs liefern identisch 404 `{"error":"Business not found"}`.
+Ungültige Eingaben/UUIDs liefern 400 `{"error":"Invalid request"}`. Anonyme Zugriffe
+liefern 401; unsichere Requests ohne gültigen CSRF-Token können bereits zuvor mit
+403 abgewiesen werden. Persistenzfehler liefern eine generische 500-Antwort ohne
+interne Details. Vorhandene Session- und CSRF-Konfigurationen bleiben unverändert.
+
+`V2__add_business_onboarding_fields.sql` ergänzt industry, legal_form und country
+mit Constraints. Bestehende Unternehmen erhalten CH; ihre Währung bleibt erhalten.
+V1 bleibt unverändert. Hibernate verwendet weiterhin `validate`.
+
+Die PostgreSQL-Integrationstests decken Erstellung/Defaults/OWNER-Zuordnung,
+Eingabevalidierung, anonyme Zugriffe, CSRF, mehrere Unternehmen pro Benutzer,
+MEMBER-Lesezugriff, IDOR und gefälschte Client-Identitäten ab. Ein temporärer
+Datenbank-Trigger im isolierten Testcontainer erzwingt einen Membership-Fehler,
+um den vollständigen Rollback nachzuweisen. Ein separates Testschema prüft den
+V1-zu-V2-Upgrade mit vorhandenen Daten.
+
+Keine neuen Abhängigkeiten, Frontend-Änderungen oder automatisch angelegten
+Unternehmen bei Registrierung. Die neuen Endpunkte bearbeiten oder löschen
+keine Unternehmen/Memberships. Künftige tenantbezogene Services müssen denselben
+Membership-Filter anwenden; allgemeine Repository-Methoden sind kein Ersatz für
+Autorisierung.
