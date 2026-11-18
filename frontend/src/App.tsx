@@ -8,6 +8,8 @@ import { AuthGate } from '@/auth/AuthRoutes'
 import { navigation } from '@/lib/navigation'
 import { BusinessBoundary } from '@/business/BusinessProvider'
 import { OnboardingPage } from '@/pages/OnboardingPage'
+import { CustomersPage } from '@/pages/CustomersPage'
+import { CustomerDetailPage } from '@/pages/CustomerDetailPage'
 import './App.css'
 
 function App() {
@@ -21,8 +23,9 @@ function App() {
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="customers/:customerId" element={<CustomerDetailPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        {navigation.slice(1).map(page => <Route key={page.path} path={page.path} element={<PlaceholderPage />} />)}
+        {navigation.slice(1).map(page => <Route key={page.path} path={page.path} element={page.path === '/customers' ? <CustomersPage /> : <PlaceholderPage />} />)}
         <Route path="*" element={<PlaceholderPage />} />
       </Route></Route></Route>
     </Routes></AuthProvider></BrowserRouter>

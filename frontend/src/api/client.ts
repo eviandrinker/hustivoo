@@ -1,8 +1,10 @@
 export class ApiError extends Error {
   readonly status: number
-  constructor(status: number) {
+  readonly fields: Record<string, string>
+  constructor(status: number, fields: Record<string, string> = {}) {
     super('Request failed')
     this.status = status
+    this.fields = fields
   }
 }
 
@@ -49,7 +51,17 @@ export async function requestJson(path: string, options: RequestInit = {}): Prom
       }
     }
     if (response.status === 401 && path !== '/api/v1/auth/login') onUnauthorized?.()
-    throw new ApiError(response.status)
+    let fields: Record<string, string> = {}
+    if (response.status === 400) {
+      try {
+        const body: unknown = await response.json()
+        if (typeof body === 'object' && body !== null && 'fields' in body &&
+            typeof body.fields === 'object' && body.fields !== null) {
+          fields = Object.fromEntries(Object.entries(body.fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+        }
+      } catch { /* Malformed errors remain safe generic errors. */ }
+    }
+    throw new ApiError(response.status, fields)
   }
   if (response.status === 204) return undefined
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Unexpected response')

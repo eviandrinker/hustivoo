@@ -196,3 +196,87 @@ angezeigt. Provider, API, Auth und Routing bleiben unverändert.
 
 16 Tests prüfen unter anderem die Auswahlwerte, Freitext-Zuordnung und die genaue
 Fehlermeldung bei leerem Unternehmensnamen. Keine Browserprüfung durchgeführt.
+
+## Operatives Kundenmodul
+
+`/customers` ersetzt die bisherige Platzhalterseite. `CustomersPage` zeigt echte
+Kunden des aktiven Unternehmens, Suche, Archivfilter, Tabelle, Erstellen/Bearbeiten
+im nativen Dialog, Bestätigung vor Archivierung und Wiederherstellung. Es werden
+keine Mock-Kontakte angezeigt. Pflichtfeld ist der Anzeigename; personenbezogene
+und Firmenangaben sind gemäss Backend optional. Fehler erscheinen am Feld oder
+als verständliche allgemeine Meldung. Nach bestätigten Schreibvorgängen gibt es
+Erfolgsfeedback und einen Listen-Refresh.
+
+Dateien: `src/api/customers.ts`, `src/customers/{store,validation,CustomerForm}`,
+`src/pages/CustomersPage.tsx`, Routing und zugehörige Styles. Der bestehende
+API-Client wurde ausschliesslich um sichere feldbezogene 400-Fehler erweitert;
+Session/CSRF bleiben unverändert. Alle Mutationen nutzen denselben Client.
+
+Der Workspace wird mit der aktiven Business-ID als React-Key gemountet. Ein
+Business-Wechsel entfernt alte Liste, Dialog und lokale Eingaben sofort.
+Unmount/Logout leert den Store und invalidiert ausstehende Requests. Auch
+verspätete Mutationen dürfen keinen Refresh alter Daten auslösen. Der API-Client
+verwirft zusätzlich Responses mit einer unerwarteten Business-ID. Dies ist eine
+UI-Schutzschicht, kein Ersatz für Backend-Autorisierung.
+
+Suche wird um 200ms verzögert; nur die neueste Antwort aktualisiert die Liste.
+Archivfilter zeigt bei Aktivierung aktive und archivierte Kontakte. Bei einem
+ungewissen Schreibresultat wird nicht automatisch erneut geschrieben; die Liste
+soll vor einem weiteren Versuch neu geladen werden. Daten sind nicht persistent
+im Browser gespeichert.
+
+Verifikation: 24 Frontend-Tests erfolgreich, einschliesslich 8 neuer API-/Store-/
+Validierungstests. ESLint, TypeScript (`tsc -b`) und Vite-Production-Build erfolgreich.
+Keine zusätzlichen Abhängigkeiten. Keine Änderungen an Auth-/Onboarding-Logik.
+
+Noch manuell im Browser prüfen (nicht als durchgeführt behauptet):
+1. Mit realer Session Kunden beider Typen anlegen, bearbeiten und suchen.
+2. Tastatur/Fokus im Formular und im Archivierungsdialog; Escape und Fehlermeldungen.
+3. Archivieren, Filter aktivieren, wiederherstellen und Erfolgsfeedback prüfen.
+4. Business-Wechsel/Logout bei langsamem Request und offenem Dialog.
+5. Mobile Tabellen-Scrollbarkeit und Formular bei 375px/768px, Desktop bei 1280px.
+6. Backend-Unterbruch, Session-Ablauf, CSRF-Ablehnung und anschliessender Retry.
+
+Die automatisierten Frontend-Tests verwenden den bestehenden Node-Runner mit
+Mock-Fetch und prüfen die echten API-/Store-Funktionen, keine DOM-Interaktionen.
+
+## Mini-CRM-Erweiterung
+
+`/customers/:customerId` zeigt Kundennummer, Status und die Bereiche Übersicht,
+Kontaktpersonen, interne Notizen und serverseitige Aktivitäten. Die Kundenliste
+verlinkt auf die Details und bietet Status-/Typfilter sowie Sortierung nach Name
+oder Erstellungsdatum. Archivierung bleibt unabhängig vom Kundenstatus.
+
+Firmenkontakte lassen sich anlegen, bearbeiten, entfernen und als Hauptkontakt
+markieren. Das Entfernen verlangt eine Bestätigung. Notizen werden ausschliesslich
+hinzugefügt; Ersteller, Zeitstempel und Aktivitäten stammen vom Backend.
+
+Der typisierte Client `src/api/customers.ts` verwendet weiterhin den gemeinsamen
+Session-/CSRF-Client. Zusätzlich zu den Kundenendpunkten nutzt er unter
+`/api/businesses/{businessId}/customers/{customerId}`:
+
+- `PATCH /status`
+- `GET/POST /contacts` und `PUT/DELETE /contacts/{contactId}`
+- `GET/POST /notes`
+- `GET /activities`
+
+Antworten werden auf Struktur und erwartete Business-/Kunden-Zuordnung geprüft.
+`src/customers/detail-store.ts` verwaltet den Ladezustand getrennt von der Ansicht.
+Business- oder Kundenwechsel erzeugen einen neuen Workspace; Unmount und Logout
+verwerfen Daten und verspätete Antworten. Mutationen werden nie automatisch
+wiederholt. Schlägt nur das Nachladen nach einem bestätigten Schreibvorgang fehl,
+bleibt dessen Erfolg erkennbar und es wird ausschliesslich das Lesen wiederholt.
+Die serverseitige Mandantenautorisierung bleibt massgeblich.
+
+Wiederverwendbare Kontaktformulare, Status-Badges und deutsche Beschriftungen
+liegen unter `src/customers`. Die Bereiche der Detailseite lassen sich später
+um weitere Module ergänzen; Angebote, Rechnungen und Projekte sind nicht implementiert.
+Tabs unterstützen Pfeiltasten, Home und End; Tabellen bieten echte Links für
+Tastaturnavigation. Responsive Styles verwenden das bestehende Designsystem.
+
+Verifikation der Erweiterung: alle 33 Frontend-Tests, ESLint, TypeScript (`tsc -b`)
+und Production-Build erfolgreich. Neue Tests decken CRM-Verträge, CSRF-Mutationen,
+Filter, Validierung, unerwartete Antworten, Lade-/Netzwerkfehler sowie Cleanup und
+verspätete Antworten beim Business-Wechsel/Logout ab. Keine neuen Abhängigkeiten.
+Browser-/DOM-Tests wurden nicht durchgeführt; Kontakt-Dialoge, Tabs, mobile
+Darstellung und vollständige Abläufe mit realem Backend sind noch manuell zu prüfen.

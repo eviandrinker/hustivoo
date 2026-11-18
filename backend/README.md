@@ -198,3 +198,59 @@ Unternehmen bei Registrierung. Die neuen Endpunkte bearbeiten oder löschen
 keine Unternehmen/Memberships. Künftige tenantbezogene Services müssen denselben
 Membership-Filter anwenden; allgemeine Repository-Methoden sind kein Ersatz für
 Autorisierung.
+
+## Kundenverwaltung
+
+V3 (`V3__create_customers.sql`) ergänzt `customers`; V1 und V2 bleiben unverändert.
+Jeder Kunde hat eine UUID und eine unveränderliche, verpflichtende Business-ID
+mit Foreign Key (kein Cascade-Delete). Ein zusammengesetzter Unique-Key
+`(business_id, id)` ermöglicht später mandantensichere zusammengesetzte Referenzen
+von Rechnungen/Projekten. Der Index `(business_id, archived, display_name)` unterstützt
+Business-Listen. Kein Hard-Delete-Endpunkt: Archivierung erhält Referenzierbarkeit.
+
+Felder: type (PRIVATE/COMPANY), displayName (Pflicht, 255), companyName (255),
+firstName/lastName (120), email (320), phone (50), street (255), postalCode (20),
+city (120), country (2, Default CH), notes (4000), archived (Default false),
+createdAt/updatedAt (Instant/TIMESTAMPTZ). Alle Kontaktfelder ausser displayName
+sind optional. Leere optionale Strings werden null, Länder grossgeschrieben.
+ISO-Land, E-Mail und Längen werden validiert; der Anzeigename bleibt unabhängig
+von Firmen-/Personennamen. Doppelte Namen oder E-Mails sind erlaubt.
+
+Basis: `/api/businesses/{businessId}/customers`
+
+| Methode | Pfad | Antwort |
+| --- | --- | --- |
+| GET | Basis | 200 Array, standardmässig nur aktive Kunden |
+| POST | Basis | 201 Customer-DTO mit Location |
+| GET | `/{customerId}` | 200 Customer-DTO |
+| PUT | `/{customerId}` | 200, vollständiger Ersatz der editierbaren Kontaktfelder |
+| PATCH | `/{customerId}/archive` | 200, archived=true |
+| PATCH | `/{customerId}/restore` | 200, archived=false |
+
+GET unterstützt `search` (maximal 320 Zeichen; case-insensitive Teilzeichenfolge
+in Anzeigename, Firma oder E-Mail) und `includeArchived=true` (aktive **und**
+archivierte). Prozent/Unterstrich werden als normale Suchzeichen behandelt.
+Ergebnisse sortieren nach Anzeigename und UUID. POST/PUT nehmen Kontaktfelder
+entgegen, keine autorisierende User-ID, Business-ID oder archived-Eigenschaft.
+PATCH benötigt keinen Body. Alle Schreiboperationen benötigen Session und CSRF.
+
+`CustomerService` verwendet die vorhandene BusinessService-Membership-Prüfung aus
+dem Security Context. Jedes Detail/Update/Archivieren sucht zusätzlich mit
+Customer-ID **und** Business-ID. OWNER und MEMBER erhalten identische Lese- und
+Schreibrechte für operative Kundendaten; weitergehende Rollenregeln waren bisher
+nicht definiert. Diese Entscheidung ist durch einen MEMBER-Schreibtest abgesichert.
+Fremde Businesses, fremde Kunden und unbekannte UUIDs liefern gleichermassen
+404 `{"error":"Customer not found","fields":{}}`. Validierungsfehler liefern
+400 mit `error` und gegebenenfalls feldbezogenem `fields`-Objekt, ohne beanstandete
+Werte oder interne Exception-Details.
+
+Verifikation: `./mvnw verify` mit Java 25 erfolgreich, 42 Tests bestanden.
+PostgreSQL/Testcontainers prüfen CRUD ohne Hard-Delete, Suche, Archivierung,
+Wiederherstellung, Validierung, Membership, MEMBER-Schreiben, manipulierte
+Business-/Customer-IDs, 401, CSRF und Flyway/Hibernate mit V3. Bestehende Auth- und
+Onboarding-Tests bleiben erfolgreich.
+
+Grenzen: Listen sind derzeit nicht paginiert; für grosse Datenbestände folgen
+Pagination und ggf. Suchindizes. Gleichzeitige Änderungen nutzen aktuell
+Last-Write-Wins; kein Audit-Log oder optimistischer Versionskonflikt. Die
+Kontaktverwaltung erstellt noch keine Rechnungen, Angebote oder Projekte.

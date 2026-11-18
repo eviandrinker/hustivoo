@@ -1,0 +1,2 @@
+export const customerStatusLabels = { LEAD: 'Interessent', ACTIVE: 'Aktiv', INACTIVE: 'Inaktiv' }
+export const activityLabels = { CREATED: 'Kunde erstellt', UPDATED: 'Kundendaten geändert', STATUS_CHANGED: 'Status geändert', CONTACT_CREATED: 'Kontaktperson hinzugefügt', CONTACT_UPDATED: 'Kontaktperson geändert', CONTACT_REMOVED: 'Kontaktperson entfernt', NOTE_ADDED: 'Notiz hinzugefügt', ARCHIVED: 'Kunde archiviert', RESTORED: 'Kunde wiederhergestellt' }
