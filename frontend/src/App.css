@@ -233,3 +233,37 @@ textarea.form-control { min-height: 112px; resize: vertical; }
   .topbar-right > .text-link { display: none; }
   .logout-control .button { padding-inline: 8px; }
 }
+
+.onboarding-content { width: 100%; max-width: 600px; }
+.onboarding-brand { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; }
+.business-switcher { margin: 24px 0 16px; min-width: 0; }
+.business-switcher label { display: block; color: var(--muted-foreground); font-size: 12px; margin-bottom: 8px; }
+.business-switcher p { font-size: 14px; font-weight: 550; overflow-wrap: anywhere; padding: 8px 12px; background: var(--accent); border-radius: 6px; }
+.business-switcher select { max-width: 100%; }
+
+/* Focused, quiet business setup; scoped to avoid changing authentication pages. */
+.onboarding-page { background: var(--background); padding-block: 40px; }
+.onboarding-content { max-width: 560px; }
+.onboarding-brand { justify-content: center; margin-bottom: 24px; }
+.onboarding-panel { padding: 32px; border-radius: 12px; }
+.onboarding-panel h1 { font-size: clamp(24px, 4vw, 28px); line-height: 1.25; }
+.onboarding-panel .auth-description { margin-bottom: 28px; }
+.onboarding-step { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; color: var(--muted-foreground); }
+.onboarding-step-track { display: flex; gap: 4px; }
+.onboarding-step-track span { width: 20px; height: 3px; border-radius: 2px; background: var(--primary); }
+.onboarding-step-track span:first-child { opacity: .35; }
+.onboarding-panel form { gap: 20px; }
+.onboarding-field-group { display: grid; gap: 12px; }
+.onboarding-location { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 16px; }
+.onboarding-panel .form-control { min-height: 44px; padding: 10px 12px; }
+.onboarding-panel .form-control:not(:disabled):hover { border-color: var(--caption); }
+.onboarding-panel .form-control:focus-visible { border-color: var(--primary); outline-offset: 2px; }
+.onboarding-panel .form-control::placeholder { color: var(--muted-foreground); opacity: .8; }
+.onboarding-panel form > .button { min-height: 46px; margin-top: 8px; gap: 8px; }
+.onboarding-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; font-size: 12px; color: var(--muted-foreground); padding-inline: 4px; }
+@media (max-width: 480px) {
+  .onboarding-page { padding-block: 24px; }
+  .onboarding-panel { padding: 24px 20px; }
+  .onboarding-location { grid-template-columns: 1fr; }
+  .onboarding-footer { flex-wrap: wrap; }
+}

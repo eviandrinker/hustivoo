@@ -137,3 +137,62 @@ runner and the existing TypeScript dependency. No additional testing dependency
 was installed. Run `npm run lint` and `npm run build` for ESLint, strict TypeScript,
 and bundling. These client tests mock fetch; they do not replace a browser test
 of registration, login, refresh, routing and logout against the backend.
+
+## Business-Onboarding
+
+Nach der Auth-Wiederherstellung lädt `BusinessBoundary` die echten Unternehmen
+über `/api/businesses`. Der benutzergebundene Provider wird bei Logout oder
+Accountwechsel entfernt; sein Store wird geleert. Verspätete Antworten können
+mittels Request-Generation keine alten Unternehmensdaten zurückschreiben.
+
+`src/api/business.ts` validiert Listen-, Einzel- und Erstellungsantworten zur
+Laufzeit und verwendet ausschliesslich den bestehenden Cookie-/CSRF-Client.
+`src/business/store.ts` verwaltet Liste, Auswahl, Lade-/Fehlerzustand, Refresh und
+Erstellung; React bindet ihn über `useSyncExternalStore` ein. Die Auswahl bleibt
+nur im Speicher und wird nach einem Reload aus der serverseitigen Membership-
+Liste wiederhergestellt (erstes Unternehmen). Refresh erhält eine noch gültige
+Auswahl; entfernte Memberships verschwinden aus der Auswahl. Der Switcher ist
+nur UI-Zustand, niemals serverseitige Autorisierung.
+
+Routing wartet erst auf Auth, dann auf Businesses. Nur eine erfolgreiche leere
+Liste führt zu `/onboarding`. API-Fehler zeigen Retry und Logout. Ein vorhandenes
+Unternehmen führt von `/onboarding` zum Dashboard; andere geschützte Modulrouten
+bleiben erreichbar. Erfolgreiche Erstellung übernimmt das Response-DTO direkt
+in den Store und leitet zum Dashboard weiter, ohne einen zweiten unsicheren POST.
+
+Das Formular übernimmt die Backend-Grenzen: Name erforderlich, maximal 255
+Zeichen; Branche und Unternehmensform optional, maximal 120 Zeichen. Leere
+optionale Texte werden null. Land/Währung starten mit CH/CHF und werden als
+ISO-Codes normalisiert. Die Eingabe erlaubt sämtliche ISO-Codes statt einer
+künstlich beschränkten Länder-/Währungsliste. Die vollständige ISO-Gültigkeit
+prüft das Backend; 400 wird verständlich angezeigt. Bei unbestätigter Erstellung
+kann zuerst die Liste neu geladen werden, um Doppelanlagen zu vermeiden.
+
+`npm test` führt nun 14 Tests aus. Die zusätzlichen Tests prüfen den tatsächlichen
+API-Client und Store: leere/vorhandene Listen, Wiederherstellung, Erstellung,
+Validierung, API-/Netzwerkfehler, Wechsel, Logout-Cleanup und verspätete Antworten.
+Test-Fixtures sind ausschliesslich in Tests vorhanden. UI und Business-Liste
+verwenden keine Mock-Unternehmen. Diese Tests ersetzen keine Browserprüfung;
+React-Routing/Formularinteraktionen wurden nicht im Browser verifiziert.
+
+Backend und vorhandene Dashboard-Demokennzeichnung bleiben unverändert. Keine
+neuen Abhängigkeiten. Keine Auswahl wird in localStorage gespeichert.
+
+### Visuelle Überarbeitung des Onboardings
+
+Das Onboarding verwendet eine zentrierte, maximal 560px breite Card mit Branding,
+„Schritt 2 von 2“, nativen Dropdowns und dem Button „Loslegen“. Branchen und
+Schweizer Unternehmensformen bieten „Sonstiges“ mit optionaler Freitexteingabe;
+„Noch nicht festgelegt“ wird als null übertragen. Land und Währung verwenden
+kuratierte Auswahloptionen aus `business/onboarding-options.ts` mit unveränderten
+ISO-Werten (Defaults CH/CHF). Dies ersetzt die vorherige freie Code-Eingabe.
+
+Validierungsfehler erscheinen erst nach Absenden direkt am Feld; das erste
+fehlerhafte Feld erhält Fokus. Globale Banner bleiben Server-/Netzwerkfehlern
+vorbehalten. Der vorhandene BusinessGate bietet Retry bei Listen-Ladefehlern;
+das Erstellungsformular bietet diesen Button nicht mehr an. Backend-400-Antworten
+enthalten keine Feldzuordnung und werden daher als knapper Formularhinweis
+angezeigt. Provider, API, Auth und Routing bleiben unverändert.
+
+16 Tests prüfen unter anderem die Auswahlwerte, Freitext-Zuordnung und die genaue
+Fehlermeldung bei leerem Unternehmensnamen. Keine Browserprüfung durchgeführt.

@@ -6,6 +6,8 @@ import { AuthPage } from '@/pages/AuthPage'
 import { AuthProvider } from '@/auth/AuthProvider'
 import { AuthGate } from '@/auth/AuthRoutes'
 import { navigation } from '@/lib/navigation'
+import { BusinessBoundary } from '@/business/BusinessProvider'
+import { OnboardingPage } from '@/pages/OnboardingPage'
 import './App.css'
 
 function App() {
@@ -15,12 +17,14 @@ function App() {
         <Route path="/login" element={<AuthPage key="login" />} />
         <Route path="/register" element={<AuthPage key="register" register />} />
       </Route>
-      <Route element={<AuthGate />}><Route element={<AppLayout />}>
+      <Route element={<AuthGate />}><Route element={<BusinessBoundary />}>
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         {navigation.slice(1).map(page => <Route key={page.path} path={page.path} element={<PlaceholderPage />} />)}
         <Route path="*" element={<PlaceholderPage />} />
-      </Route></Route>
+      </Route></Route></Route>
     </Routes></AuthProvider></BrowserRouter>
   )
 }
