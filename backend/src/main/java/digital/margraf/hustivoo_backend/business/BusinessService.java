@@ -49,6 +49,24 @@ public class BusinessService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
+    /** The caller's membership of a business; unknown and foreign businesses are indistinguishable (404). */
+    public record Access(Business business, MembershipRole role, UUID userId) {
+        public boolean owner() { return role == MembershipRole.OWNER; }
+    }
+
+    public Access access(UUID businessId) {
+        UUID userId = currentUser().getId();
+        Membership membership = memberships.findByBusiness_IdAndUser_Id(businessId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        // Unwrap the lazy proxy so package-private mutators always act on the managed entity itself.
+        return new Access(org.hibernate.Hibernate.unproxy(membership.getBusiness(), Business.class), membership.getRole(), userId);
+    }
+
+    /** Current document sender of a business the caller belongs to (membership is checked). */
+    public SenderProfile sender(UUID businessId) {
+        return SenderProfile.of(access(businessId).business());
+    }
+
     private User currentUser() {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()

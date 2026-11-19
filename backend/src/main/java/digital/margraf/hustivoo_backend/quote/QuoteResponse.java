@@ -12,7 +12,10 @@ public record QuoteResponse(UUID id, UUID businessId, UUID customerId, String qu
         LocalDate issueDate, LocalDate validUntil, String currency, String introductionText, String closingText,
         String notes, String subtotal, String taxTotal, String grandTotal, CustomerSnapshot customer,
         List<Item> items, List<TaxGroup> taxGroups, Instant sentAt, Instant decidedAt,
-        Instant createdAt, Instant updatedAt) {
+        Instant createdAt, Instant updatedAt, InvoiceLink invoice) {
+
+    /** Invoice created from this quote (V8), or null. */
+    public record InvoiceLink(UUID id, String invoiceNumber) {}
 
     public record CustomerSnapshot(String customerNumber, String name, String companyName, String contactName,
             String street, String postalCode, String city, String country, String email) {}
@@ -40,7 +43,9 @@ public record QuoteResponse(UUID id, UUID businessId, UUID customerId, String qu
         return (stripped.scale() < 0 ? stripped.setScale(0) : stripped).toPlainString();
     }
 
-    static QuoteResponse from(Quote quote) {
+    static QuoteResponse from(Quote quote) { return from(quote, null); }
+
+    static QuoteResponse from(Quote quote, InvoiceLink invoice) {
         List<Item> items = quote.getItems().stream().map(item -> new Item(item.getId(), item.getServiceId(),
                 item.getPosition(), item.getDescription(), quantity(item.getQuantity()), item.getUnit(),
                 money(item.getUnitPrice()), money(item.getTaxRate()), money(item.getLineSubtotal()),
@@ -54,6 +59,6 @@ public record QuoteResponse(UUID id, UUID businessId, UUID customerId, String qu
                 new CustomerSnapshot(quote.getCustomerNumber(), quote.getCustomerName(), quote.getCustomerCompanyName(),
                         quote.getCustomerContactName(), quote.getCustomerStreet(), quote.getCustomerPostalCode(),
                         quote.getCustomerCity(), quote.getCustomerCountry(), quote.getCustomerEmail()),
-                items, groups, quote.getSentAt(), quote.getDecidedAt(), quote.getCreatedAt(), quote.getUpdatedAt());
+                items, groups, quote.getSentAt(), quote.getDecidedAt(), quote.getCreatedAt(), quote.getUpdatedAt(), invoice);
     }
 }

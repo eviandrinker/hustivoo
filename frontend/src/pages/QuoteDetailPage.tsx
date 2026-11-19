@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBusiness } from '@/business/context'
 import * as api from '@/api/quotes'
+import { invoiceFromQuote } from '@/api/invoices'
 import { ApiError } from '@/api/client'
 import { quoteDetailStore } from '@/quotes/store'
 import { QuoteActions, QuoteOverview } from '@/quotes/QuoteOverview'
@@ -65,6 +66,15 @@ function QuoteDetail({ businessId, quoteId }: { businessId: string; quoteId: str
       if (applied && mounted.current) navigate('/quotes', { replace: true, state: { message: 'Entwurf gelöscht.' } })
     }, conflict)
   }
+  /** Double clicks and parallel tabs end on the same invoice: the server returns the existing one. */
+  function createInvoice() {
+    void run(async () => {
+      const result = await invoiceFromQuote(businessId, quoteId)
+      if (mounted.current) navigate(`/invoices/${encodeURIComponent(result.id)}`, { state: { message: result.created ? 'Rechnungsentwurf aus dem Angebot erstellt.' : 'Für dieses Angebot besteht bereits eine Rechnung.' } })
+    }, caught => caught instanceof ApiError && caught.status === 409
+      ? 'Nur angenommene Angebote können in eine Rechnung umgewandelt werden.'
+      : 'Die Rechnung konnte nicht erstellt werden. Bitte lade das Angebot neu und versuche es erneut.')
+  }
   async function download(quote: api.Quote) {
     if (downloading) return
     setDownloading(true); setError('')
@@ -90,6 +100,7 @@ function QuoteDetail({ businessId, quoteId }: { businessId: string; quoteId: str
           onEdit={() => navigate(`/quotes/${encodeURIComponent(quote.id)}/edit`)}
           onDelete={() => { setError(''); setConfirm('delete') }}
           onDownload={() => void download(quote)}
+          onInvoice={createInvoice}
           onAction={action => {
             const blocker = action === 'send' ? sendBlocker(quote) : null
             setSuccess('')

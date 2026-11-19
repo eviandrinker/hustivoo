@@ -538,10 +538,9 @@ und mit Code-Point (ohne Text) als WARN geloggt, also nicht stillschweigend erse
 
 ### Bekannte Einschränkungen
 
-- Businesses speichern weder Adresse noch Logo, Kontaktangaben, UID oder
-  Bankverbindung. Das PDF zeigt deshalb nur den Unternehmensnamen; nichts wird erfunden.
-  Renderer und `DocumentSender` unterstützen diese Angaben bereits, sobald das
-  Business-Modell sie liefert.
+- Absenderangaben stammen aus den Unternehmenseinstellungen (siehe unten). Leere
+  Felder erscheinen nicht. Angebote, die vor V7 versendet wurden, zeigen weiterhin
+  nur den Namen.
 - CJK, Emoji und rechts-nach-links-Schriften (Hebräisch, Arabisch) deckt Inter nicht ab.
   Sie erscheinen als „?“ mit Log-Warnung. PDFBox setzt kein RTL und keine Ligaturen,
   deshalb wurde bewusst kein unvollständiger Zweitfont ergänzt. Echte Unterstützung
@@ -581,3 +580,361 @@ Fusszeile. Mit `-Dquote.pdf.out=<Verzeichnis>` werden alle Test-PDFs zur Sichtpr
 abgelegt.
 
 Ergebnis `./mvnw verify`: **81 Tests, 0 Fehler, 0 Fehlschläge**.
+
+## Unternehmenseinstellungen
+
+Stammdaten und Branding eines Unternehmens: Adresse, Kontakt, UID/MWST-Nummer,
+Bankverbindung, Akzentfarbe, Logo und Fusszeile. Angebote übernehmen diese Angaben,
+Rechnungen sollen sie später ebenfalls nutzen.
+
+### Migration V7
+
+`V7__business_settings.sql` ändert keine bestehende Migration.
+
+- **`businesses`:** Neue Spalten `street`, `postal_code`, `city`, `email`, `phone`,
+  `website`, `vat_number`, `iban` (kompakt, Grossbuchstaben), `bank_name`,
+  `document_footer` (max. 160 Zeichen), `brand_color` (`#RRGGBB`) und `logo_id`.
+  - CHECK-Constraints: Text darf nicht nur aus Leerzeichen bestehen; Format von IBAN
+    und Farbe.
+- **`business_logos`:** Unveränderliche PNGs.
+  - Ein Trigger blockiert jedes `UPDATE`.
+  - Begrenzt auf 1 MB und 4000 × 4000 px.
+  - `UNIQUE (id, business_id)`.
+- **Mandantentrennung in der Datenbank:** `businesses.logo_id` und
+  `quotes.sender_logo_id` verweisen über zusammengesetzte Fremdschlüssel
+  `(logo_id, business_id)` auf das Logo. Ein Unternehmen kann daher kein fremdes
+  Logo referenzieren.
+- **`quotes`:** Absender-Snapshot `sender_country`, `sender_street` …
+  `sender_brand_color`, `sender_logo_id`.
+  - Für bestehende Angebote wird `sender_country` einmalig aus dem Unternehmen
+    übernommen.
+  - Dafür ist der Guard für versendete Angebote nur während dieses Updates
+    deaktiviert. Danach ist `sender_country` `NOT NULL`.
+
+### API
+
+Pfad: `/api/businesses/{businessId}/settings`. Alle Endpunkte verlangen eine Session,
+schreibende zusätzlich `X-CSRF-TOKEN`.
+
+| Methode | Pfad | Rolle | Ergebnis |
+| --- | --- | --- | --- |
+| `GET` | `/settings` | OWNER, MEMBER | Einstellungen inkl. `role`, `editable`, `logo` (`id`, `width`, `height`, `sizeBytes`) |
+| `PUT` | `/settings` | OWNER | speichert alle Felder (JSON); Antwort wie `GET` |
+| `PUT` | `/settings/logo` | OWNER | Rohdaten des Bildes (`Content-Type: image/png` oder `image/jpeg`) |
+| `DELETE` | `/settings/logo` | OWNER | entfernt das aktuelle Logo |
+| `GET` | `/settings/logo` | OWNER, MEMBER | aktuelles Logo als PNG |
+
+- **Logo abrufen:** Das Logo kommt mit `Cache-Control: private, no-cache`, ETag
+  (Logo-ID), `nosniff` und `Content-Security-Policy: sandbox`.
+- **Berechtigungen:**
+  - Die Identität stammt ausschliesslich aus dem Security Context.
+  - Die Rolle kommt aus `memberships`.
+  - Nicht-Mitglieder und unbekannte IDs erhalten identisch `404 {"error":"Business not found","fields":{}}`.
+  - MEMBER erhält bei Änderungen `403 {"error":"Only owners can change business settings","fields":{}}`.
+  - Vom Client gesendete `id`, `role` oder `currency` werden ignoriert.
+- **Validierung** (`BusinessSettingsRequest`):
+  - Fehler kommen als `400 {"error":"Invalid request","fields":{"iban":"…"}}`.
+    Eingereichte Werte werden nie zurückgegeben.
+  - Name ist Pflicht.
+  - Land: ISO-3166-Code.
+  - E-Mail- und Telefonformat (5–15 Ziffern).
+  - Website: nur Domain oder `http(s)`; `javascript:` und Ähnliches werden abgelehnt.
+  - Schweizer UID mit eCH-0097-Prüfziffer, normalisiert zu `CHE-123.456.789 MWST`.
+    Ausländische MWST-Nummern werden nur formal geprüft.
+  - IBAN: Prüfziffer (Mod 97) und Länge für die Onboarding-Länder.
+  - Freitext ohne Steuerzeichen und Zeilenumbrüche.
+  - Akzentfarbe mit mindestens 4.5:1 Kontrast auf Weiss (WCAG AA), weil sie Text
+    druckt.
+  - Die Währung ist nicht änderbar, weil Angebote und Kataloge auf ihr beruhen.
+- **Logo-Upload** (`LogoImages`, nur JDK, keine neue Abhängigkeit):
+  - Der Body wird mit hartem Limit gelesen (2 MB).
+  - Zulässig sind PNG und JPEG. Der Typ wird an der Dateisignatur erkannt und muss
+    zum `Content-Type` passen. SVG ist ausgeschlossen.
+  - Die Abmessungen werden aus dem Header gelesen, bevor das Bild dekodiert wird:
+    mindestens 16 × 16 px, höchstens 40 MP. So werden „Decompression Bombs“
+    abgewiesen.
+  - Anschliessend wird das Bild auf höchstens 1200 × 600 px verkleinert und als PNG
+    neu kodiert. Das entfernt Metadaten wie EXIF/GPS und garantiert, dass PDFBox es
+    einbetten kann.
+  - Fehler kommen als `400 {"error":"Invalid logo","fields":{"logo":"…"}}` mit
+    deutscher Meldung.
+  - Ein ersetztes oder entferntes Logo wird gelöscht, sofern kein versendetes
+    Angebot es eingefroren hat.
+
+### Snapshots und PDF
+
+- **Entwürfe:** Das PDF zeigt die aktuellen Einstellungen. Ein Entwurf ist noch
+  kein Dokument, Änderungen sollen sofort sichtbar sein.
+- **Versenden:** `PATCH …/send` friert den vollständigen Absender ein
+  (`Quote.freezeSender`): Adresse, Kontakt, UID, IBAN, Bank, Fusszeile, Farbe und
+  Logo-ID. Das PDF eines versendeten Angebots nutzt nur diese Spalten
+  (`Quote.frozenSender()`). Spätere Änderungen an Einstellungen, Logo oder Land
+  ändern es nicht.
+- **`SenderProfile`:** Übersetzt Einstellungen oder Snapshot in `DocumentSender` und
+  `DocumentTheme`. Leere Werte entfallen, nichts wird ergänzt.
+  - Briefkopf: Logo, Name, eine Adresszeile („Seestrasse 12 · 8002 Zürich“, das
+    Land nur bei ausländischen Empfängern), dazu E-Mail · Telefon und
+    Website · UID.
+  - Fusszeile jeder Seite: IBAN (in Vierergruppen) · Bank, darunter der
+    Fusszeilentext über die volle Breite. Ohne Bankverbindung und Fusszeilentext
+    steht dort wie bisher die Adresse.
+  - Akzentfarbe: Markierung, „ANGEBOT“ und Linie über dem Total. Der helle Ton für
+    das Entwurf-Label wird daraus abgeleitet.
+- **Layout:** Mit vollständigem Profil passen 5 Positionen samt Summen und
+  Schlusstext auf eine Seite. Dafür wurde der Abstand nach dem Briefkopf (40 → 34
+  pt) und vor dem Schlusstext (40 → 32 pt) leicht reduziert. Getestet in
+  `QuotePdfLayoutTests.completeBusinessSettingsFitTheLayout` mit 1, 5 und 30
+  Positionen.
+
+### Tests und Einschränkungen
+
+- **`BusinessSettingsTests`** (Testcontainers):
+  - Normalisierung und Leeren von Feldern.
+  - Feldweise Validierung ohne Echo der Eingaben.
+  - OWNER/MEMBER-Rechte.
+  - Identische 404 für fremde und unbekannte Unternehmen.
+  - Session und CSRF.
+  - Logo-Prüfung: SVG, falscher Typ, zu klein, Decompression Bomb, über 2 MB, leer.
+  - Logo-Normalisierung, ETag/304, Ersetzen und Löschen.
+  - Mandantengebundene, unveränderliche Logos.
+  - Entwurf mit Live-Daten, versendetes Angebot mit eingefrorenem Absender und Logo.
+  - Upgrade V6 → V7.
+- **Bekannte Einschränkungen:**
+  - Kein Bildzuschnitt im Browser.
+  - CMYK-JPEGs kann `ImageIO` nicht lesen. Sie werden mit einer Meldung abgelehnt;
+    als PNG exportiert funktionieren sie.
+  - Eingefrorene Logos bleiben gespeichert, solange ein versendetes Angebot sie
+    referenziert. Es gibt keine Bereinigung beim Löschen eines Unternehmens, weil
+    Unternehmen nicht gelöscht werden.
+  - Gleichzeitige Änderungen zweier Owner: Die letzte Speicherung gewinnt, es gibt
+    kein Optimistic Locking.
+  - Ein extrem breiter Fusszeilentext (160 Zeichen nur aus breiten Glyphen) würde
+    im PDF mit „…“ gekürzt. Normale Texte passen.
+  - Die IBAN-Länge wird nur für die Onboarding-Länder geprüft, sonst nur die
+    Prüfziffer.
+
+## Rechnungsverwaltung
+
+Rechnungen (`RE-0001` …) mit Positionen, Zahlungseingängen, Umwandlung angenommener
+Angebote und Schweizer QR-Zahlteil. Berechnung, Katalog-Snapshots und Mandantentrennung
+folgen den Angeboten. Die Positionsaufbereitung (`quote/LineItems`) und `QuoteCalculator`
+werden geteilt, Angebot und Rechnung rechnen also identisch.
+
+### Migration V8
+
+`V8__create_invoices.sql` ändert keine bestehende Migration.
+
+| Tabelle | Inhalt |
+| --- | --- |
+| `invoice_number_counters` | atomarer Zähler pro Unternehmen (`INSERT … ON CONFLICT … RETURNING`, wie bei Angeboten) |
+| `invoices` | Kopf, Beträge, `paid_total`, Kunden- und vollständiger Absender-Snapshot inkl. Logo-ID, `quote_id`, Ausstellungs- und Stornodaten |
+| `invoice_items` | Positions-Snapshots (gleiche Spalten und Constraints wie `quote_items`) |
+| `invoice_payments` | Zahlungseingänge, nur anhängend; Storno mit Zeitpunkt, Benutzer und Grund |
+
+Konsistenz in der Datenbank:
+
+- **Mandantentrennung:** Kunde, Angebot, Leistung und Logo werden über zusammengesetzte
+  Fremdschlüssel `(business_id, …)` referenziert.
+- **Fälligkeit:** `due_date = issue_date + payment_term_days`.
+- **Beträge:** `grand_total = subtotal + tax_total` und `0 ≤ paid_total ≤ grand_total`.
+- **Status und Zahlungen:** Der gespeicherte Status passt immer zu `paid_total`
+  (`ck_invoices_payment_status`). Ein beim Commit geprüfter Trigger stellt sicher, dass
+  `paid_total` exakt der Summe der aktiven Zahlungen entspricht.
+- **Eine Rechnung pro Angebot:** `uq_invoices_quote`.
+- **`invoices_guard`:** Nur Entwürfe sind bearbeitbar oder löschbar. Nach dem Ausstellen
+  dürfen sich nur Status, `paid_total` und Stornofelder ändern. CANCELLED ist endgültig.
+- **`invoice_items_guard`:** Positionen ausgestellter Rechnungen sind unveränderlich.
+- **`invoice_payments_guard`:**
+  - Zahlungen nur auf offene Rechnungen.
+  - Kein `DELETE`.
+  - Nur ein einziger Storno-Vermerk; der Betrag bleibt unveränderlich.
+
+### Status
+
+```
+DRAFT ──ausstellen──▶ ISSUED ◀──Zahlungen──▶ PARTIALLY_PAID ◀──Zahlungen──▶ PAID
+                        └──stornieren (ohne aktive Zahlungen)──▶ CANCELLED
+```
+
+- **Zahlstatus:** PARTIALLY_PAID und PAID ergeben sich ausschliesslich aus den gebuchten
+  Zahlungen. Ein Zahlungsstorno setzt den Status entsprechend zurück.
+- **Überfällig:** **OVERDUE** wird nie gespeichert. Es ist ein Anzeigestatus
+  (`displayStatus`, `overdue`): offen und `due_date` vor heute (Europe/Zurich). Damit kann
+  Zeit die Buchhaltung nicht verändern.
+- **Ausstellen:** Es braucht mindestens eine Position und ein Total > 0.
+- **Stornieren:** Es braucht einen Grund. Bei Rechnungen mit Zahlungen werden zuerst die
+  Zahlungen storniert, damit die Buchhaltung nachvollziehbar bleibt.
+
+### Zahlungen
+
+- **Buchung:** Zahlungsdatum (nicht in der Zukunft), Betrag > 0 mit höchstens den
+  Nachkommastellen der Währung, Methode (`BANK_TRANSFER`, `QR_BILL`, `CASH`, `CARD`,
+  `TWINT`, `OTHER`), Referenz und Bemerkung optional.
+- **Überzahlung:** Ein Betrag über dem offenen Betrag ergibt
+  `400 {"fields":{"amount":…}}`.
+- **Korrekturen:** `PATCH …/payments/{id}/reverse` mit Grund. Die Zahlung bleibt
+  sichtbar und wird als storniert markiert; danach bucht man den richtigen Betrag neu.
+  Nichts wird überschrieben oder gelöscht.
+- **Nebenläufigkeit:** Buchungen sperren die Rechnungszeile (`PESSIMISTIC_WRITE`).
+  Parallele Buchungen werden dadurch serialisiert, und eine Überzahlung durch zwei
+  gleichzeitige Requests ist ausgeschlossen.
+- **Keine Bankanbindung.**
+
+### Angebot → Rechnung
+
+- **Endpunkt:** `POST /api/businesses/{id}/quotes/{quoteId}/invoice`, nur für Angebote
+  im Status ACCEPTED.
+- **Übernahme:** Kunde, Positionen (mit den gespeicherten Preisen, Steuersätzen und
+  Zeilenbeträgen), Währung, Einleitungs- und Abschlusstext. Die internen Notizen des
+  Angebots werden nicht übernommen.
+- **Ergebnis:** Ein Entwurf mit eigener Nummer, heutigem Datum und 30 Tagen Frist. Das
+  Angebot bleibt unverändert; `QuoteResponse.invoice` verlinkt die Rechnung.
+- **Doppelklicks und parallele Requests:**
+  - Die Angebotszeile wird gesperrt, und der Unique-Index sichert zusätzlich ab.
+  - Jede weitere Umwandlung erhält
+    `409 {"error":"Quote already invoiced","invoiceId":"…"}`.
+  - Das Frontend öffnet dann einfach diese Rechnung.
+- **Teilrechnungen später:** Dafür entfiele `uq_invoices_quote` zugunsten einer
+  Prüfung „Summe der Teilrechnungen ≤ Angebotstotal“. Zusätzlich bräuchte es eine
+  Positions- oder Prozentzuordnung. Umgesetzt ist bewusst nur die vollständige Rechnung.
+
+### API
+
+Basis: `/api/businesses/{businessId}`. Alle Endpunkte verlangen eine Session, schreibende
+zusätzlich `X-CSRF-TOKEN`. OWNER und MEMBER haben dieselben Rechte (wie bei Angeboten).
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/invoices?search=&status=` | Liste; `status` inkl. `OVERDUE` |
+| `POST` | `/invoices` | Entwurf erstellen (201, `Location`) |
+| `GET` | `/invoices/{id}` | Details inkl. Zahlungen, Angebot, `qrBill` |
+| `PUT` | `/invoices/{id}` | Entwurf bearbeiten |
+| `DELETE` | `/invoices/{id}` | Entwurf löschen (204) |
+| `PATCH` | `/invoices/{id}/issue` | ausstellen |
+| `PATCH` | `/invoices/{id}/cancel` | stornieren, Body `{"reason":"…"}` |
+| `GET` | `/invoices/{id}/pdf` | PDF (`Rechnung-RE-0001.pdf`, `no-store`) |
+| `GET` | `/invoices/{id}/payments` | Zahlungshistorie |
+| `POST` | `/invoices/{id}/payments` | Zahlung buchen (201) |
+| `PATCH` | `/invoices/{id}/payments/{paymentId}/reverse` | Zahlung stornieren, Body `{"reason":"…"}` |
+| `POST` | `/quotes/{quoteId}/invoice` | angenommenes Angebot umwandeln (201 / 409 mit `invoiceId`) |
+
+Fehler kommen als JSON `{"error", "fields", "invoiceId"}` ohne eingereichte Werte.
+Fremde und unbekannte IDs (Rechnung, Zahlung, Kunde, Leistung, Angebot) liefern
+identisch `404 Invoice not found` bzw. dieselben Feldfehler. Vom Client gesendete
+Summen, Status, Fälligkeit, Nummern oder IDs werden ignoriert.
+
+### PDF und Schweizer QR-Rechnung
+
+- **Gemeinsames Layout:** Rechnung und Angebot nutzen dasselbe Layout
+  (`document/BusinessDocumentRenderer`). `QuotePdfRenderer` und `InvoicePdfRenderer`
+  bilden nur noch ihre Daten auf `BusinessDocument` ab.
+- **Rechnungs-PDF:**
+  - Kopf mit „RECHNUNG“ und Nummer.
+  - Rechnungsdetails: Datum, Fälligkeit, Frist, Angebotsnummer.
+  - Tabelle, Summen, „Zahlbar bis …“, Abschlusstext.
+- **Kompakte Variante:** Mit Zahlteil wird der vertikale Rhythmus etwas enger, damit
+  kurze Rechnungen inklusive Zahlteil auf einer Seite bleiben. Getestet mit 1, 5, 20
+  und 50 Positionen.
+- **Snapshots:**
+  - Entwürfe zeigen die aktuellen Einstellungen.
+  - `issue` friert Kunde und vollständigen Absender ein: Adresse, Kontakt, UID, IBAN,
+    Bank, Fusszeile, Farbe und Logo-ID.
+  - Ausgestellte und stornierte Rechnungen drucken nur noch diese Werte. Ein
+    eingefrorenes Logo wird beim Ersetzen nicht gelöscht.
+
+**Spezifikation:** Grundlage sind die *Swiss Implementation Guidelines for the QR-bill*
+**v2.4** (SIX, gültig ab 14.11.2026; v2.3 bleibt bis November 2027 gültig) und der SIX
+*Style Guide QR-bill*. Beide wurden am 18.11.2026 geprüft. Umgesetzt in
+`document/qrbill`:
+
+- **Daten (`SwissQrBill`):**
+  - `SPC`/`0200`/`1`, 31 Zeilen getrennt durch LF, ohne abschliessenden Umbruch.
+  - Nur strukturierte Adressen (`S`; die kombinierte Adresse ist seit v2.3 entfallen).
+  - Hausnummern werden aus der Strassenzeile abgetrennt, wenn das eindeutig erkennbar
+    ist („Seestrasse 12“ → `Seestrasse` / `12`). Sonst bleibt die ganze Zeile im
+    Strassenfeld, was laut IG 4.3.1 toleriert wird.
+  - Der Ultimate Creditor bleibt leer.
+  - Betrag 0.01–999 999 999.99 in CHF oder EUR.
+  - Referenztyp **`NON`** mit unstrukturierter Mitteilung „Rechnung RE-0001“.
+  - Zeichensatz gemäss IG 4.1.1: Latin-1, Latin Extended-A, Ș ș Ț ț, €.
+  - Längen 70/16/16/35.
+- **Nicht unterstützt:** QR-IBAN mit QRR (bräuchte eine QR-IBAN-Vereinbarung mit der
+  Bank) und SCOR. Eine QR-IBAN (IID 30000–31999) wird mit Erklärung abgelehnt, nicht
+  „irgendwie“ verwendet.
+- **Validierung statt ungültigem Code:**
+  - Ohne IBAN, mit ausländischer, ungültiger oder QR-IBAN, ohne PLZ/Ort, in anderer
+    Währung oder mit nicht zulässigen Zeichen entsteht **kein** Zahlteil.
+  - `InvoiceResponse.qrBill` liefert dann `available:false` mit deutschen Gründen. Die
+    Detailseite zeigt sie mit Link zu den Einstellungen.
+  - Ein unvollständiger oder nicht codierbarer Debitor wird weggelassen; der Zahlteil
+    zeigt dann „Zahlbar durch (Name/Adresse)“ mit Leerfeld, was die Guidelines erlauben.
+- **Entwürfe:** Offizielle Benachrichtigungsvariante (IG 4.4) mit Betrag `0.00` und
+  „NICHT ZUR ZAHLUNG VERWENDEN“.
+- **Stornierte Rechnungen:** Kein Zahlteil.
+- **Layout (`QrBillSlip`):**
+  - 210 × 105 mm am unteren Rand der letzten Seite. Passt er nicht mehr, steht er auf
+    einer eigenen Seite (separater Zahlteil). Die Fusszeile dieser Seite steht
+    einzeilig darüber.
+  - Empfangsschein 62 mm, Zahlteil 148 mm, Ränder 5 mm.
+  - Gestrichelte Trennlinien mit Scherensymbol und „Vor der Einzahlung abzutrennen“
+    (PDF-Variante, IG 3.7).
+  - Titel 11 pt fett. Zahlteil: Überschriften 8 pt fett, Werte 10 pt, Zeilenabstand
+    11 pt. Empfangsschein: 6/8 pt, Zeilenabstand 9 pt. Betrag mit Leerzeichen als
+    Tausendertrenner.
+  - QR-Code: Fehlerkorrektur M, kleinste Version (≤ 25), Byte-Modus, 46 × 46 mm bei
+    17 mm vom oberen Rand, als Vektorgrafik mit Schweizerkreuz 7 × 7 mm.
+  - Informationsteil ab 56 mm, Betragsbereich ab 68 mm.
+  - Leerfelder mit Eckmarken 3 mm / 0.75 pt (65 × 25 bzw. 52 × 20 mm).
+  - Schrift: **Liberation Sans** (laut IG 3.4 zulässig; SIL OFL, eingebettet unter
+    `resources/fonts/liberation`). Inter ist im Zahlteil nicht erlaubt.
+- **Abhängigkeiten:**
+  - `io.nayuki:qrcodegen` 1.8.0: Referenz-Encoder, MIT, keine transitiven
+    Abhängigkeiten.
+  - `com.google.zxing:core` nur im **Test-Scope**, um den gezeichneten QR-Code aus dem
+    gerenderten PDF zurückzulesen.
+
+### Tests
+
+- **`SwissQrBillTests`:**
+  - Exakte Datenstruktur.
+  - IBAN-Fälle: Prüfziffer, Länge, Land, QR-IBAN, LI.
+  - Beträge, Währungen, Benachrichtigungsvariante, Adressen und Hausnummern,
+    Zeichensatz.
+  - QR-Version ≤ 25 mit Level M.
+- **`InvoicePdfLayoutTests`:**
+  - 1/5/20/50 Positionen, jeweils mit **Dekodierung des QR-Codes aus dem
+    300-dpi-Rendering** und Vergleich mit dem erwarteten Payload.
+  - Positionen von Empfangsschein, Zahlteil und Informationsteil in mm.
+  - Nur Liberation Sans im Zahlteil, kein Dokumentinhalt im Zahlteilbereich, Fusszeile
+    über dem Zahlteil.
+  - Entwurf, Debitor ohne Adresse, fehlende IBAN, Storno.
+- **`InvoiceTests`** (Testcontainers):
+  - Berechnung und MWST, Validierung ohne Nummernverbrauch.
+  - Bearbeiten und Löschen von Entwürfen, Ausstellen mit Schreibschutz (API und
+    DB-Trigger).
+  - Teil- und Vollzahlung, Überzahlung, negative und zukünftige Zahlungen, Storno.
+  - Stornoregeln, OVERDUE und Filter.
+  - Umwandlung inklusive 6 paralleler Requests.
+  - Parallele Nummernvergabe.
+  - Mandantentrennung, Session und CSRF.
+  - PDF-Snapshots nach Änderung von Einstellungen und Kunde.
+  - Upgrade V7 → V8.
+
+### Bekannte Einschränkungen
+
+- **Referenzen:** Keine QR-Referenz (QRR/QR-IBAN) und keine Creditor Reference (SCOR).
+  Zahlungen lassen sich nur über die Mitteilung „Rechnung RE-…“ zuordnen.
+- **Nummernlücken:** Rechnungsnummern werden beim Anlegen des Entwurfs vergeben.
+  Gelöschte Entwürfe hinterlassen Lücken; die Nummern ausgestellter Rechnungen sind
+  lückenlos fortlaufend.
+- **Fremdwährungen:** Rechnungen in USD/GBP sind möglich, aber ohne QR-Zahlteil.
+- **QR-Betrag:** Der QR-Code enthält das Rechnungstotal, nicht den aktuell offenen
+  Betrag. Das PDF ist das unveränderliche ausgestellte Dokument.
+- **Rechte:** Bewusst wie bei Angeboten; MEMBER darf Rechnungen ausstellen, Zahlungen
+  buchen und stornieren. Ein Rollenmodell für Buchhaltung fehlt.
+- **Kein Mahnwesen,** keine Teilrechnungen, keine E-Mail-Zustellung, keine
+  Bankanbindung (camt.054).
+- **Separater Zahlteil:** Längere Rechnungen, oder zwei Positionen mit Einleitung und
+  Schluss, erhalten den Zahlteil auf einer eigenen letzten Seite.
+- **Zeitzone:** Überfälligkeit und „heute“ basieren auf Europe/Zurich.
+

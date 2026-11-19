@@ -432,3 +432,103 @@ Manuell noch prüfen:
 5. Zwei Tabs: Entwurf in Tab A bearbeiten, in Tab B senden, in A speichern → Hinweis 409.
 6. Abgelaufene Session/CSRF-Fehler beim Speichern; Netzwerkausfall.
 7. Tablet (768px) und sehr lange Kundennamen/Beschreibungen; viele Positionen.
+
+## Unternehmenseinstellungen (`/settings`)
+
+`SettingsPage` zeigt die Einstellungen des aktiven Unternehmens in vier Abschnitten:
+
+- **Unternehmen:** Name, Rechtsform und Branche (mit Vorschlägen), Währung nur zur
+  Ansicht.
+- **Kontakt & Adresse:** Strasse, PLZ, Ort, Land, E-Mail, Telefon, Website.
+- **Steuern & Bankverbindung:** UID/MWST-Nummer, IBAN, Bank.
+- **Dokumentdesign:** Logo mit Vorschau, Akzentfarbe (Farbwähler, Hex-Feld,
+  „Standardfarbe verwenden“), einzeilige Fusszeile mit Zeichenzähler und eine
+  vereinfachte Briefkopf-Vorschau. Die Vorschau folgt denselben Regeln wie das PDF.
+
+Weitere Details:
+
+- **Bausteine:** `api/settings.ts`, `settings/validation.ts`, `settings/store.ts`,
+  `settings/SettingsForm.tsx`, `pages/SettingsPage.tsx`. Wiederverwendet werden
+  `FormField`, `Input`, `Select`, `Button`, `PageHeader`, `InformationPanel`,
+  `LoadingState` und `ErrorState`.
+- **Zustände:**
+  - Laden und Ladefehler mit „Erneut laden“.
+  - Eine Speicherleiste unten am Bildschirmrand zeigt ungespeicherte Änderungen,
+    „Wird gespeichert…“, Erfolg und Fehler. Sie bietet „Verwerfen“; beim Verlassen
+    der Seite mit ungespeicherten Änderungen fragt der Browser nach.
+  - Ungültige Felder werden markiert und fokussiert. Server-Feldfehler werden auf
+    die passende deutsche Meldung abgebildet.
+- **Validierung:** spiegelt die Serverregeln (IBAN Mod 97, Schweizer
+  UID-Prüfziffer, Kontrast der Akzentfarbe ≥ 4.5:1, Längen, keine
+  Zeilenumbrüche). Der Server bleibt massgeblich.
+- **Logo:**
+  - Die Datei wird vor dem Upload geprüft (PNG/JPEG, höchstens 2 MB, nicht leer)
+    und sofort hochgeladen.
+  - Die Vorschau zeigt das vom Server normalisierte Logo
+    (`/settings/logo?v=<logoId>`, gleiche Session).
+  - Ersetzen und Entfernen laufen unabhängig vom übrigen Formular, ungespeicherte
+    Eingaben bleiben erhalten.
+- **Rollen:** MEMBER sieht dieselben Daten in einem deaktivierten `fieldset`,
+  lesbar gestylt, mit einem Hinweis und ohne Speichern-, Upload- oder
+  Entfernen-Buttons. Massgeblich ist `editable` aus der API, das für MEMBER nie
+  `true` werden kann.
+- **Unternehmenswechsel und Logout:**
+  - Die Seite ist per `key={active.id}` an das Unternehmen gebunden.
+  - `settingsStore.clear()` verwirft Daten und macht laufende Lese- und
+    Schreibantworten wirkungslos. Antworten mit fremder Business-ID werden
+    verworfen.
+  - Nach dem Speichern aktualisiert `businessStore.replace()` den Namen in der
+    Navigation, ohne den gesamten Business-Kontext neu zu laden.
+- **Tests:** `tests/settings.test.mjs` (API, Parsing, Validierung, Store,
+  Business-Store) und `tests/settings-view.test.mjs` (Owner- und Member-Ansicht,
+  Logo-Zustände, Vorschau).
+
+## Rechnungsverwaltung (`/invoices`)
+
+### Seiten
+
+- **`/invoices` – Übersicht:**
+  - Titel „Rechnungen“, Button „Neue Rechnung“.
+  - Suche nach Nummer oder Kunde, Statusfilter inklusive „Überfällig“.
+  - Tabelle mit Nummer, Kunde, Datum, Fälligkeit (rot, wenn überfällig), Total, offenem
+    Betrag, Status-Badge und Aktionen.
+  - Leer-, Lade- und Fehlerzustände.
+- **`/invoices/new` und `/invoices/:id/edit` – Editor:**
+  - Kunde, Rechnungsdatum, Zahlungsfrist (Sofort bis 90 Tage, mit „Fällig am …“),
+    Währung (Hinweis, dass der QR-Zahlteil nur CHF/EUR kann).
+  - Positionen und Texte, Live-Summen.
+  - Der Positionsbereich ist mit dem Angebotseditor geteilt
+    (`documents/PositionsEditor.tsx`), ebenso die Positionsvalidierung
+    (`validatePositions`).
+- **`/invoices/:id` – Details:**
+  - Aktionen nach Status: Bearbeiten, PDF, Rechnung ausstellen, Zahlung erfassen,
+    Stornieren, Löschen.
+  - Bezahlt und Offen in der Zusammenfassung, Zahlungshistorie mit „Stornieren“ je
+    Zahlung (der Grund bleibt sichtbar), Link zum Angebot.
+  - Hinweis zum QR-Zahlteil: vorhanden, als Entwurfsvorschau oder fehlend mit den
+    Gründen des Servers und Link zu den Einstellungen.
+  - Ausstellen und Löschen werden bestätigt. Zahlung, Rechnungsstorno und
+    Zahlungsstorno nutzen kompakte Dialoge mit Formular.
+
+### Angebote
+
+Bei angenommenen Angeboten gibt es „Rechnung erstellen“. Danach öffnet sich die neue
+Rechnung. Besteht schon eine, verlinkt die Aktion „Rechnung RE-…“ direkt. Ein Doppelklick
+oder ein zweiter Tab endet dank `409 + invoiceId` auf derselben Rechnung
+(`api/invoices.ts › invoiceFromQuote`).
+
+### Technik
+
+- **Zahlungsvalidierung:** Datum nicht in der Zukunft, Betrag > 0 mit höchstens den
+  Nachkommastellen der Währung, nie über dem offenen Betrag (BigInt-Arithmetik). Für
+  Stornos ist ein Grund Pflicht.
+- **Stores** (`invoices/store.ts`) mit Epoch- und Lifecycle-Schutz.
+- **Unternehmenswechsel und Logout:** Seiten sind per `key` an das Unternehmen
+  gebunden, Detail- und Editorseiten springen beim Wechsel auf `/invoices`. Späte
+  Antworten werden verworfen.
+- **Tests:**
+  - `tests/invoices.test.mjs`: API, Whitelist, CSRF, Umwandlung und 409, Parsing,
+    Validierung, Rechte nach Status, Stores.
+  - `tests/invoices-view.test.mjs`: Liste, Editor, Aktionen, Detail, QR-Hinweis,
+    Zahlungsformular, Angebotsaktion.
+

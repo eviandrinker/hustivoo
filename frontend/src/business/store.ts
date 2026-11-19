@@ -37,6 +37,12 @@ export function createBusinessStore(api: {
       if (!active || state.status !== 'ready') throw new Error('Business unavailable')
       update({ ...state, active })
     },
+    /** Reflects saved settings (e.g. a new name) without reloading; ignored for unknown businesses. */
+    replace(business: Business) {
+      if (state.status !== 'ready' || !state.businesses.some(item => item.id === business.id)) return
+      update({ ...state, businesses: state.businesses.map(item => item.id === business.id ? business : item),
+        active: state.active?.id === business.id ? business : state.active })
+    },
     async create(input: CreateBusiness) {
       const request = ++epoch
       const business = await api.createBusiness(input)

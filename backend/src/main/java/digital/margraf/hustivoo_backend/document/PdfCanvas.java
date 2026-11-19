@@ -30,6 +30,9 @@ public final class PdfCanvas implements AutoCloseable {
     }
 
     public DocumentFonts fonts() { return fonts; }
+    /** Low-level access for parts with their own drawing rules (e.g. the Swiss QR payment part). */
+    public PDDocument document() { return document; }
+    public PDPageContentStream stream() { return stream; }
     public int pageCount() { return document.getNumberOfPages(); }
 
     public void newPage() throws IOException {

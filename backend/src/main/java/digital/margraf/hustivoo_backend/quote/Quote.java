@@ -1,5 +1,6 @@
 package digital.margraf.hustivoo_backend.quote;
 
+import digital.margraf.hustivoo_backend.business.SenderProfile;
 import digital.margraf.hustivoo_backend.customer.Customer;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -46,6 +47,21 @@ public class Quote {
     private BigDecimal grandTotal;
     @Column(name = "sender_name", nullable = false, length = 255)
     private String senderName;
+    @Column(name = "sender_country", nullable = false, length = 2)
+    private String senderCountry;
+    // Frozen sender details (V7). Filled when the quote is sent; drafts print the current settings.
+    @Column(name = "sender_street", length = 255) private String senderStreet;
+    @Column(name = "sender_postal_code", length = 20) private String senderPostalCode;
+    @Column(name = "sender_city", length = 120) private String senderCity;
+    @Column(name = "sender_email", length = 320) private String senderEmail;
+    @Column(name = "sender_phone", length = 40) private String senderPhone;
+    @Column(name = "sender_website", length = 255) private String senderWebsite;
+    @Column(name = "sender_vat_number", length = 40) private String senderVatNumber;
+    @Column(name = "sender_iban", length = 34) private String senderIban;
+    @Column(name = "sender_bank_name", length = 120) private String senderBankName;
+    @Column(name = "sender_document_footer", length = 160) private String senderDocumentFooter;
+    @Column(name = "sender_brand_color", length = 7) private String senderBrandColor;
+    @Column(name = "sender_logo_id") private UUID senderLogoId;
     @Column(name = "customer_number", nullable = false, length = 32)
     private String customerNumber;
     @Column(name = "customer_name", nullable = false, length = 255)
@@ -95,9 +111,10 @@ public class Quote {
     }
 
     /** Copies the master data needed for the document; refreshed while drafting and when sending. */
-    void snapshot(String senderName, Customer customer) {
+    void snapshot(String senderName, String senderCountry, Customer customer) {
         requireDraft();
         this.senderName = senderName;
+        this.senderCountry = senderCountry;
         this.customerId = customer.getId();
         this.customerNumber = customer.getCustomerNumber();
         this.customerName = customer.getDisplayName();
@@ -110,6 +127,32 @@ public class Quote {
         this.customerCity = customer.getCity();
         this.customerCountry = customer.getCountry();
         this.customerEmail = customer.getEmail();
+    }
+
+    /** Freezes the complete sender (address, payment details, branding, logo) when the quote is issued. */
+    void freezeSender(SenderProfile sender) {
+        requireDraft();
+        this.senderName = sender.name();
+        this.senderCountry = sender.country();
+        this.senderStreet = sender.street();
+        this.senderPostalCode = sender.postalCode();
+        this.senderCity = sender.city();
+        this.senderEmail = sender.email();
+        this.senderPhone = sender.phone();
+        this.senderWebsite = sender.website();
+        this.senderVatNumber = sender.vatNumber();
+        this.senderIban = sender.iban();
+        this.senderBankName = sender.bankName();
+        this.senderDocumentFooter = sender.documentFooter();
+        this.senderBrandColor = sender.brandColor();
+        this.senderLogoId = sender.logoId();
+    }
+
+    /** The sender as frozen on this quote. Quotes issued before V7 only carry name and country. */
+    public SenderProfile frozenSender() {
+        return new SenderProfile(senderName, senderCountry, senderStreet, senderPostalCode, senderCity, senderEmail,
+                senderPhone, senderWebsite, senderVatNumber, senderIban, senderBankName, senderDocumentFooter,
+                senderBrandColor, senderLogoId);
     }
 
     void replaceItems(List<QuoteItem> next, QuoteCalculator.Totals totals) {
@@ -146,6 +189,8 @@ public class Quote {
     public BigDecimal getTaxTotal() { return taxTotal; }
     public BigDecimal getGrandTotal() { return grandTotal; }
     public String getSenderName() { return senderName; }
+    public String getSenderCountry() { return senderCountry; }
+    public UUID getSenderLogoId() { return senderLogoId; }
     public String getCustomerNumber() { return customerNumber; }
     public String getCustomerName() { return customerName; }
     public String getCustomerCompanyName() { return customerCompanyName; }

@@ -5,5 +5,5 @@ export function useBusiness() {
   const store = useContext(BusinessContext)
   if (!store) throw new Error('BusinessProvider required')
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
-  return { ...state, refresh: store.refresh, select: store.select, create: store.create }
+  return { ...state, refresh: store.refresh, select: store.select, create: store.create, replace: store.replace }
 }

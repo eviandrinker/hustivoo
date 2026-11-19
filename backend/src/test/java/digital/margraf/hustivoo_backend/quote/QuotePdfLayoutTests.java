@@ -1,6 +1,6 @@
 package digital.margraf.hustivoo_backend.quote;
 
-import digital.margraf.hustivoo_backend.business.BusinessResponse;
+import digital.margraf.hustivoo_backend.business.SenderProfile;
 import digital.margraf.hustivoo_backend.customer.Customer;
 import digital.margraf.hustivoo_backend.customer.CustomerRequest;
 import digital.margraf.hustivoo_backend.customer.CustomerType;
@@ -36,7 +36,11 @@ import static org.assertj.core.api.Assertions.*;
 /** Layout regression tests on real PDFs: geometry from glyph positions, text from extraction. */
 class QuotePdfLayoutTests {
     static final QuotePdfRenderer RENDERER = new QuotePdfRenderer();
-    static final BusinessResponse BUSINESS = new BusinessResponse(UUID.randomUUID(), "Live-Name (darf nicht erscheinen)", null, null, "CH", "CHF", Instant.now(), Instant.now());
+
+    /** Renders like an issued quote: only the sender data frozen on the quote itself. */
+    static byte[] render(Quote quote) {
+        return RENDERER.render(quote, quote.frozenSender().document(null, quote.getCustomerCountry()), quote.frozenSender().theme(), quote.getSenderCountry());
+    }
 
     // ------------------------------------------------------------------ fixtures
 
@@ -52,7 +56,7 @@ class QuotePdfLayoutTests {
                 "Vielen Dank für Ihre Anfrage. Gerne unterbreiten wir Ihnen das folgende Angebot.",
                 "Vielen Dank für Ihr Vertrauen. Wir freuen uns auf die Zusammenarbeit.", "INTERNE NOTIZ – nie im PDF");
         if (header != null) header.accept(quote);
-        quote.snapshot(sender, customer);
+        quote.snapshot(sender, "CH", customer);
         List<QuoteItem> items = new ArrayList<>();
         List<QuoteCalculator.Line> lines = new ArrayList<>();
         for (ItemSpec spec : specs) {
@@ -162,7 +166,7 @@ class QuotePdfLayoutTests {
     @ValueSource(ints = {0, 1, 5, 20, 50})
     void documentsOfAnyLengthKeepMarginsFooterAndPagination(int count) throws IOException {
         Quote quote = standard(count);
-        Pdf pdf = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf pdf = inspect(render(quote));
         assertLayout(pdf);
         if (count <= 5) assertThat(pdf.pages()).hasSize(1);
         if (count == 50) assertThat(pdf.pages().size()).isBetween(3, 6);
@@ -181,7 +185,7 @@ class QuotePdfLayoutTests {
     }
 
     @Test void carryOverEqualsTheExactSumOfPrintedAmounts() throws IOException {
-        Pdf pdf = inspect(RENDERER.render(standard(50), BUSINESS));
+        Pdf pdf = inspect(render(standard(50)));
         BigDecimal printed = BigDecimal.ZERO;
         for (int page = 0; page < pdf.pages().size() - 1; page++) {
             String text = pdf.pages().get(page);
@@ -210,7 +214,7 @@ class QuotePdfLayoutTests {
                 new ItemSpec("Sehr lange Position\n" + essay, "12.5", ServiceUnit.HOUR, "145.00", "8.10"),
                 new ItemSpec(unbroken, "999999999.999", ServiceUnit.MONTH, "1.00", "0"),
                 new ItemSpec("Schluss", "3", ServiceUnit.DAY, "1200.00", "2.60")), null);
-        Pdf pdf = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf pdf = inspect(render(quote));
         assertLayout(pdf);
         String compact = pdf.compact();
         for (String text : List.of(sender, company, street, unbroken)) assertThat(compact).contains(text.replaceAll("\\s+", ""));
@@ -230,13 +234,13 @@ class QuotePdfLayoutTests {
                 new ItemSpec("Unterkunft", "2", ServiceUnit.DAY, "180.00", "3.80"),
                 new ItemSpec("Fachbuch", "1", ServiceUnit.PIECE, "49.90", "2.60"),
                 new ItemSpec("Gebühr", "1", ServiceUnit.FIXED, "25.00", "0")), null);
-        String text = inspect(RENDERER.render(mixed, BUSINESS)).text();
+        String text = inspect(render(mixed)).text();
         assertThat(text).contains("MWST 2.6 % auf 49.90", "CHF 1.30", "MWST 3.8 % auf 360.00", "CHF 13.68",
                 "MWST 8.1 % auf 951.00", "CHF 77.03", "CHF 1’385.90", "CHF 1’477.91");
         assertThat(mixed.getGrandTotal()).isEqualByComparingTo("1477.91");
 
         Quote untaxed = quote("Studio Nord", customer("Muster AG", null, null, null), List.of(new ItemSpec("Beratung", "2", ServiceUnit.HOUR, "100.00", "0")), null);
-        Pdf pdf = inspect(RENDERER.render(untaxed, BUSINESS));
+        Pdf pdf = inspect(render(untaxed));
         assertLayout(pdf);
         assertThat(pdf.text()).contains("MWST", "CHF 0.00", "CHF 200.00").doesNotContainPattern("MWST \\d");
         pdf.document().close();
@@ -249,7 +253,7 @@ class QuotePdfLayoutTests {
         Quote quote = quote("Café Müller – Lüdenscheid & Söhne", customer(name, company, street, "Genève"), List.of(
                 new ItemSpec("Übersetzung „Grüße“ ‹Qualität› € 5 – Ž Č Š ő ű ł ñ ß", "1", ServiceUnit.FIXED, "10.00", "0"),
                 new ItemSpec("Kombinierte Zeichen: é ä · 漢字 🚀", "1", ServiceUnit.FIXED, "10.00", "0")), null);
-        Pdf pdf = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf pdf = inspect(render(quote));
         assertLayout(pdf);
         assertThat(pdf.text()).contains(name, company, street, "Genève", "Café Müller – Lüdenscheid & Söhne");
         assertThat(pdf.compact()).contains("Übersetzung„Grüße“‹Qualität›€5–ŽČŠőűłñß", "KombinierteZeichen:éä·???");
@@ -265,7 +269,7 @@ class QuotePdfLayoutTests {
 
     @Test void onlySnapshotDataIsPrintedAndDraftsAreMarked() throws IOException {
         Quote quote = standard(2);
-        Pdf draft = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf draft = inspect(render(quote));
         assertThat(draft.text()).contains("Studio Nord", "Muster AG", "Erika Muster", "Bahnhofstrasse 1", "8001 Zürich",
                 "Kundennummer K-0007", "ANG-0042", "18.11.2026", "18.12.2026", "Gültig bis 18.12.2026 · Beträge in CHF",
                 "Angebot für Muster AG", "Vielen Dank für Ihre Anfrage.")
@@ -275,7 +279,7 @@ class QuotePdfLayoutTests {
         assertThat(draft.document().getDocumentCatalog().getLanguage()).isEqualTo("de-CH");
         draft.document().close();
         quote.transitionTo(QuoteStatus.SENT, Instant.now());
-        Pdf sent = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf sent = inspect(render(quote));
         assertThat(sent.compact()).doesNotContain("ENTWURF");
         assertThat(sent.text()).doesNotContain("Schweiz"); // domestic country omitted
         sent.document().close();
@@ -308,7 +312,7 @@ class QuotePdfLayoutTests {
     @Test void footerTruncatesOnlyRepeatedTextAndNeverCollides() throws IOException {
         String sender = "Ein ausserordentlich langer Unternehmensname, der in der Fusszeile gekürzt werden muss, damit nichts kollidiert AG";
         Quote quote = quote(sender, customer("Muster AG", null, null, null), List.of(item(1)), null);
-        Pdf pdf = inspect(RENDERER.render(quote, BUSINESS));
+        Pdf pdf = inspect(render(quote));
         assertLayout(pdf);
         assertThat(pdf.compact()).contains(sender.replaceAll("\\s+", ""));  // full name in the letterhead
         String footer = pdf.glyphs().getFirst().stream().filter(glyph -> glyph.baseline() < QuotePdfRenderer.FOOTER_RULE)
@@ -316,5 +320,33 @@ class QuotePdfLayoutTests {
         assertThat(footer).contains("…").contains("Seite1von1");
         assertThat(bodyWithoutFooter(pdf, 0)).contains("Total");
         pdf.document().close();
+    }
+
+    @ParameterizedTest @ValueSource(ints = {1, 5, 30})
+    void completeBusinessSettingsFitTheLayout(int count) throws IOException {
+        BufferedImage logo = new BufferedImage(480, 120, BufferedImage.TYPE_INT_ARGB);
+        var graphics = logo.createGraphics();
+        graphics.setColor(new Color(0x7A2E3B)); graphics.fillRoundRect(0, 0, 120, 120, 30, 30);
+        graphics.fillRect(150, 30, 330, 60); graphics.dispose();
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        ImageIO.write(logo, "png", png);
+        SenderProfile profile = new SenderProfile("Atelier Bergwerk GmbH", "CH", "Seestrasse 12", "8002", "Zürich",
+                "hallo@atelier-bergwerk.ch", "+41 44 123 45 67", "www.atelier-bergwerk.ch", "CHE-116.281.710 MWST",
+                "CH9300762011623852957", "Zürcher Kantonalbank", "Zahlbar innert 30 Tagen netto. Vielen Dank für Ihren Auftrag!",
+                "#7A2E3B", UUID.randomUUID());
+        Quote quote = standard(count);
+        Pdf pdf = inspect(RENDERER.render(quote, profile.document(png.toByteArray(), "CH"), profile.theme(), "CH"));
+        assertLayout(pdf);
+        assertThat(pdf.pages().getFirst()).contains("Seestrasse 12 · 8002 Zürich", "hallo@atelier-bergwerk.ch · +41 44 123 45 67",
+                "www.atelier-bergwerk.ch · UID CHE-116.281.710 MWST").doesNotContain("Schweiz");
+        for (String page : pdf.pages()) {
+            assertThat(page).contains("IBAN CH93 0076 2011 6238 5295 7", "Zürcher Kantonalbank",
+                    "Zahlbar innert 30 Tagen netto. Vielen Dank für Ihren Auftrag!").doesNotContain("…");
+        }
+        if (count <= 5) assertThat(pdf.pages()).hasSize(1);
+        pdf.document().close();
+        // A foreign recipient sees the sender's country.
+        String foreign = inspect(RENDERER.render(quote, profile.document(null, "DE"), profile.theme(), "CH")).text();
+        assertThat(foreign).contains("Seestrasse 12 · 8002 Zürich · Schweiz");
     }
 }

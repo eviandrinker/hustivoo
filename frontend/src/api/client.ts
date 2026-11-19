@@ -1,10 +1,13 @@
 export class ApiError extends Error {
   readonly status: number
   readonly fields: Record<string, string>
-  constructor(status: number, fields: Record<string, string> = {}) {
+  /** Set on 409 when the conflict points at an existing invoice (e.g. a quote that was already converted). */
+  readonly invoiceId?: string
+  constructor(status: number, fields: Record<string, string> = {}, invoiceId?: string) {
     super('Request failed')
     this.status = status
     this.fields = fields
+    this.invoiceId = invoiceId
   }
 }
 
@@ -68,7 +71,15 @@ async function fail(response: Response, path: string): Promise<never> {
       }
     } catch { /* Malformed errors remain safe generic errors. */ }
   }
-  throw new ApiError(response.status, fields)
+  let invoiceId: string | undefined
+  if (response.status === 409) {
+    try {
+      const body: unknown = await response.json()
+      if (typeof body === 'object' && body !== null && 'invoiceId' in body && typeof body.invoiceId === 'string' &&
+          /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(body.invoiceId)) invoiceId = body.invoiceId
+    } catch { /* Without a body the conflict stays generic. */ }
+  }
+  throw new ApiError(response.status, fields, invoiceId)
 }
 
 /** Authenticated binary GET (e.g. PDF documents) with the same session and error handling as JSON requests. */

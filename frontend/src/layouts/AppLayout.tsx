@@ -8,7 +8,7 @@ import { Sidebar } from '@/components/Sidebar'
 
 export function AppLayout() {
   const { pathname } = useLocation()
-  const title = pathname.startsWith('/customers/') ? 'Kundendetails' : pathname === '/quotes/new' ? 'Neues Angebot' : pathname.startsWith('/quotes/') ? 'Angebot' : navigation.find(item => item.path === pathname)?.title ?? 'Page not found'
+  const title = pathname.startsWith('/customers/') ? 'Kundendetails' : pathname === '/quotes/new' ? 'Neues Angebot' : pathname.startsWith('/quotes/') ? 'Angebot' : pathname === '/invoices/new' ? 'Neue Rechnung' : pathname.startsWith('/invoices/') ? 'Rechnung' : navigation.find(item => item.path === pathname)?.title ?? 'Page not found'
   const status = useBackendHealth()
   useEffect(() => {
     document.title = `${title} · Hustivoo`

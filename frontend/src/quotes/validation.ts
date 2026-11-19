@@ -90,12 +90,19 @@ export function validateQuote(input: QuoteInput): Record<string, string> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.issueDate)) errors.issueDate = 'Bitte gib ein Ausstellungsdatum ein.'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.validUntil)) errors.validUntil = 'Bitte gib ein Gültigkeitsdatum ein.'
   else if (!errors.issueDate && input.validUntil < input.issueDate) errors.validUntil = 'Das Angebot muss mindestens bis zum Ausstellungsdatum gültig sein.'
+  Object.assign(errors, validatePositions(input, 'Ein Angebot'))
+  return errors
+}
+
+/** Shared by quotes and invoices: currency, texts and positions (same server rules for both). */
+export function validatePositions(input: Pick<QuoteInput, 'currency' | 'introductionText' | 'closingText' | 'notes' | 'items'>, noun: string): Record<string, string> {
+  const errors: Record<string, string> = {}
   const digits = minorDigits(input.currency)
   if (!/^[A-Z]{3}$/.test(input.currency) || digits > 2) errors.currency = 'Bitte wähle eine unterstützte Währung.'
   for (const [key, value] of [['introductionText', input.introductionText], ['closingText', input.closingText], ['notes', input.notes]] as const) {
     if ((value?.length ?? 0) > 4000) errors[key] = 'Bitte verwende höchstens 4000 Zeichen.'
   }
-  if (input.items.length > MAX_ITEMS) errors.items = `Ein Angebot kann höchstens ${MAX_ITEMS} Positionen enthalten.`
+  if (input.items.length > MAX_ITEMS) errors.items = `${noun} kann höchstens ${MAX_ITEMS} Positionen enthalten.`
   input.items.forEach((item, index) => {
     const prefix = `items[${index}].`
     if (!item.description) errors[`${prefix}description`] = 'Bitte beschreibe die Position.'

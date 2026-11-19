@@ -1,4 +1,5 @@
-import { Check, Download, Pencil, Send, Trash2, X } from 'lucide-react'
+import { Check, Download, FileText, Pencil, Send, Trash2, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { Quote, QuoteAction } from '@/api/quotes'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
@@ -11,9 +12,11 @@ import { formatDate, formatMoney, formatQuantity, formatRate } from './money'
 const actionIcons: Record<QuoteAction, typeof Send> = { send: Send, accept: Check, reject: X }
 
 /** Status-dependent actions: only drafts can be edited/deleted; issued quotes are read-only. */
-export function QuoteActions({ quote, pending, downloading, onEdit, onDelete, onAction, onDownload }: {
+export function QuoteActions({ quote, pending, downloading, onEdit, onDelete, onAction, onDownload, onInvoice }: {
   quote: Quote; pending: boolean; downloading: boolean
   onEdit: () => void; onDelete: () => void; onAction: (action: QuoteAction) => void; onDownload: () => void
+  /** Accepted quotes become invoices; an existing invoice is linked instead. */
+  onInvoice?: () => void
 }) {
   return <div className="page-actions quote-actions">
     {quote.status === 'DRAFT' && <Button variant="secondary" disabled={pending} onClick={onEdit}><Pencil size={15} aria-hidden="true" />Bearbeiten</Button>}
@@ -22,6 +25,9 @@ export function QuoteActions({ quote, pending, downloading, onEdit, onDelete, on
       const Icon = actionIcons[action]
       return <Button key={action} variant={action === 'reject' ? 'secondary' : 'primary'} disabled={pending} onClick={() => onAction(action)}><Icon size={15} aria-hidden="true" />{actionCopy[action].label}</Button>
     })}
+    {quote.status === 'ACCEPTED' && (quote.invoice
+      ? <Link className="button button--primary" to={`/invoices/${encodeURIComponent(quote.invoice.id)}`}><FileText size={15} aria-hidden="true" />Rechnung {quote.invoice.invoiceNumber}</Link>
+      : onInvoice && <Button disabled={pending} onClick={onInvoice}><FileText size={15} aria-hidden="true" />{pending ? 'Rechnung wird erstellt…' : 'Rechnung erstellen'}</Button>)}
     {quote.status === 'DRAFT' && <Button variant="tertiary" className="quote-delete" disabled={pending} onClick={onDelete}><Trash2 size={15} aria-hidden="true" />Löschen</Button>}
   </div>
 }

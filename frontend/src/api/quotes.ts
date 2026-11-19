@@ -65,6 +65,8 @@ export interface Quote {
   decidedAt: string | null
   createdAt: string
   updatedAt: string
+  /** Invoice created from this quote, if any. */
+  invoice: { id: string; invoiceNumber: string } | null
 }
 export interface QuoteSummary {
   id: string
@@ -132,7 +134,9 @@ export function parseQuote(value: unknown, businessId: string, id?: string): Quo
     check(isString(entry.rate) && RATE.test(entry.rate) && ['base', 'tax'].every(key => isString(entry[key]) && MONEY.test(entry[key])))
     return entry as unknown as QuoteTaxGroup
   })
-  return { ...(data as unknown as Quote), customer: customer as unknown as QuoteCustomer, items, taxGroups }
+  const invoice = data.invoice === undefined || data.invoice === null ? null : record(data.invoice)
+  check(invoice === null || (isString(invoice.id) && isString(invoice.invoiceNumber) && /^RE-\d{4,}$/.test(invoice.invoiceNumber)))
+  return { ...(data as unknown as Quote), customer: customer as unknown as QuoteCustomer, items, taxGroups, invoice: invoice as Quote['invoice'] }
 }
 
 function base(businessId: string) { return `/api/businesses/${encodeURIComponent(businessId)}/quotes` }
