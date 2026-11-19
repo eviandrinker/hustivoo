@@ -21,7 +21,7 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   const errorRef = useRef<HTMLDivElement>(null)
   const state = location.state as { from?: unknown; registered?: boolean } | null
   const destination = typeof state?.from === 'string' ? state.from : ''
-  const from = (navigation.some(item => item.path === destination.split(/[?#]/)[0]) || /^\/customers\/[\da-f-]{36}$/.test(destination.split(/[?#]/)[0])) ? destination : '/dashboard'
+  const from = (navigation.some(item => item.path === destination.split(/[?#]/)[0]) || ['/expenses/new', '/expenses/settings'].includes(destination.split(/[?#]/)[0]) || /^\/(customers|expenses)\/[\da-f-]{36}$/.test(destination.split(/[?#]/)[0])) ? destination : '/dashboard'
 
   useEffect(() => { document.title = `${register ? 'Create account' : 'Sign in'} · Hustivoo` }, [register])
   useEffect(() => { if (error) errorRef.current?.focus() }, [error])

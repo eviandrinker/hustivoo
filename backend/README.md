@@ -938,3 +938,12 @@ Summen, Status, Fälligkeit, Nummern oder IDs werden ignoriert.
   Schluss, erhalten den Zahlteil auf einer eigenen letzten Seite.
 - **Zeitzone:** Überfälligkeit und „heute“ basieren auf Europe/Zurich.
 
+
+## Ausgaben und Belege (V9)
+
+Das vollständige Modul, seine API, Rundungsregeln, Zahlungskorrekturen,
+Mandantentrennung, private Dateispeicherung und Dashboard-Aggregationen sind in
+[docs/expenses.md](../docs/expenses.md) dokumentiert. Der Belegspeicher ist über
+`RECEIPT_STORAGE_DIRECTORY` konfigurierbar und liegt standardmässig ausserhalb
+des Repositories. PDF-/Bilddateien werden als sichere Darstellung neu erzeugt;
+byteidentische Originalarchivierung gehört nicht zu diesem Modul.

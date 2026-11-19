@@ -532,3 +532,16 @@ oder ein zweiter Tab endet dank `409 + invoiceId` auf derselben Rechnung
   - `tests/invoices-view.test.mjs`: Liste, Editor, Aktionen, Detail, QR-Hinweis,
     Zahlungsformular, Angebotsaktion.
 
+
+## Ausgaben, Belege und echte Finanzübersicht
+
+`/expenses`, `/expenses/new`, `/expenses/:expenseId` und `/expenses/settings`
+ergänzen die Ausgaben-, Lieferanten-, Kategorien- und Belegverwaltung. Das
+Dashboard nutzt nun echte CHF-Daten aus Rechnungen, Zahlungen und Ausgaben.
+Architektur, API, Einschränkungen und die noch erforderlichen manuellen
+Browserprüfungen stehen in [docs/expenses.md](../docs/expenses.md).
+
+Der gemeinsame API-Client wurde um einen CSRF-geschützten Multipart-Upload mit
+Fortschritt ergänzt. Bestehende JSON-/Blob-Anfragen bleiben erhalten. Die neuen
+Frontend-Tests verwenden weiterhin den vorhandenen Node-Runner und Reacts
+Server-Renderer; es wurden keine neuen Dependencies installiert.

@@ -19,9 +19,12 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { InvoicesPage } from '@/pages/InvoicesPage'
 import { InvoiceDetailPage } from '@/pages/InvoiceDetailPage'
 import { InvoiceEditorPage } from '@/pages/InvoiceEditorPage'
+import { ExpensesPage } from '@/pages/ExpensesPage'
+import { ExpenseEditorPage } from '@/pages/ExpenseEditorPage'
+import { ExpenseSettingsPage } from '@/pages/ExpenseSettingsPage'
 import './App.css'
 
-const modulePages: Record<string, ReactNode> = { '/customers': <CustomersPage />, '/services': <ServicesPage />, '/quotes': <QuotesPage />, '/settings': <SettingsPage />, '/invoices': <InvoicesPage /> }
+const modulePages: Record<string, ReactNode> = { '/expenses': <ExpensesPage />, '/customers': <CustomersPage />, '/services': <ServicesPage />, '/quotes': <QuotesPage />, '/settings': <SettingsPage />, '/invoices': <InvoicesPage /> }
 
 function App() {
   return (
@@ -41,6 +44,9 @@ function App() {
         <Route path="invoices/new" element={<InvoiceEditorPage />} />
         <Route path="invoices/:invoiceId" element={<InvoiceDetailPage />} />
         <Route path="invoices/:invoiceId/edit" element={<InvoiceEditorPage />} />
+        <Route path="expenses/new" element={<ExpenseEditorPage />} />
+        <Route path="expenses/settings" element={<ExpenseSettingsPage />} />
+        <Route path="expenses/:expenseId" element={<ExpenseEditorPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         {navigation.slice(1).map(page => <Route key={page.path} path={page.path} element={modulePages[page.path] ?? <PlaceholderPage />} />)}
         <Route path="*" element={<PlaceholderPage />} />

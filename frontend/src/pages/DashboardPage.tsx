@@ -1,49 +1,30 @@
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, ArrowUpRight } from 'lucide-react'
-import { RevenueChart } from '@/components/dashboard/RevenueChart'
+import { useBusiness } from '@/business/context'
+import { financeOverview, type Finance } from '@/api/expenses'
+import { useExpenseResource } from '@/expenses/useExpenseResource'
+import { localToday } from '@/quotes/validation'
+import { formatPrice } from '@/services/validation'
 import { MetricCard } from '@/components/ui/metric-card'
-import { InformationPanel, PageHeader, SectionHeader, StatusIndicator } from '@/components/ui/display'
-import { demoDashboard as data, formatMoney } from '@/data/dashboard'
-
-const shortcuts = [
-  { label: 'Add customer', path: '/customers' },
-  { label: 'Create project', path: '/projects' },
-  { label: 'Track time', path: '/time-tracking' },
-  { label: 'Create invoice', path: '/invoices' },
-  { label: 'Record expense', path: '/expenses' },
-]
-
-export function DashboardPage() {
-  const unpaid = data.invoices.reduce((sum, invoice) => sum + invoice.amount, 0)
-  const goalPercent = Math.round(data.revenue / data.goal * 100)
-  return (
-    <div className="page-content">
-      <PageHeader title="Welcome back" description="Here’s what’s happening with your business." meta={<div className="page-actions"><Link className="button button--secondary" to="/invoices">Create invoice</Link><Link className="button button--primary" to="/projects"><Plus size={16} aria-hidden="true" />New project</Link></div>} />
-      <InformationPanel className="demo-notice"><strong>Demo workspace</strong><p>Figures and activity are examples. Creation tools are coming soon; actions open module previews.</p></InformationPanel>
-      <section className="business-overview" aria-label="Business overview — demo data">
-        <div className="overview-label"><h2>This month at a glance</h2><span>{data.period} · CHF</span></div>
-        <div className="metrics-grid">
-          <MetricCard label="Revenue" value={formatMoney(data.revenue)} context="Earned this month" />
-          <MetricCard label="Profit" value={formatMoney(data.revenue - data.expenses)} context="After expenses · before tax" />
-          <MetricCard label="Unpaid invoices" value={formatMoney(unpaid)} context="3 outstanding · 1 overdue" />
-          <MetricCard label="Hours tracked" value={`${data.hours} h`} context="Across 3 active projects" />
-        </div>
-      </section>
-      <div className="dashboard-columns">
-        <section className="surface revenue-section" aria-labelledby="revenue-title"><SectionHeader id="revenue-title" title="Revenue" description="A little progress, month by month." action={<span className="section-meta">Last 6 months</span>} /><RevenueChart /></section>
-        <section className="surface attention-section" aria-labelledby="attention-title"><SectionHeader id="attention-title" title="Needs your attention" description="A few things to keep moving · demo" />
-          <div className="attention-list">
-            <Link to="/invoices" className="attention-item"><span className="attention-marker warning-marker" aria-hidden="true" /><div><strong>Studio North invoice is overdue</strong><p>{formatMoney(1800)} · due Nov 12</p><span className="attention-action">Review invoice <ArrowUpRight size={13} aria-hidden="true" /></span></div></Link>
-            <Link to="/projects" className="attention-item"><span className="attention-marker" aria-hidden="true" /><div><strong>Website refresh is up next</strong><p>Studio North · delivery Nov 24</p><span className="attention-action">View project <ArrowUpRight size={13} aria-hidden="true" /></span></div></Link>
-            <Link to="/invoices" className="attention-item"><span className="attention-marker neutral-marker" aria-hidden="true" /><div><strong>Two payments are pending</strong><p>{formatMoney(2200)} expected · Nov 25–30</p><span className="attention-action">View invoices <ArrowUpRight size={13} aria-hidden="true" /></span></div></Link>
-          </div>
-        </section>
-      </div>
-      <section className="surface projects-section" aria-labelledby="projects-title"><SectionHeader id="projects-title" title="Active projects" description="Your work in motion · demo" action={<Link className="text-link" to="/projects">View all <ArrowUpRight size={14} aria-hidden="true" /></Link>} />
-        <ul className="project-list">{data.projects.map(project => <li key={project.name} className="project-item"><div className="project-info"><h3>{project.name}</h3><p>{project.client}</p></div><StatusIndicator tone="neutral">In progress</StatusIndicator><div className="project-progress"><progress className="progress" aria-label={`${project.name} demo completion`} value={project.progress} max={100} /><span>{project.progress}%</span></div><span className="project-due">Due {project.due}</span></li>)}</ul>
-      </section>
-      <section className="monthly-goal" aria-label="Demo monthly revenue goal"><div><h2>Monthly goal</h2><p>{formatMoney(data.revenue)} of {formatMoney(data.goal)} · demo</p></div><div className="goal-progress"><progress className="progress" aria-label="Demo monthly revenue goal" value={data.revenue} max={data.goal} /><span>{goalPercent}%</span></div><p className="goal-note">{formatMoney(data.goal - data.revenue)} to go</p></section>
-      <section className="shortcuts" aria-labelledby="shortcuts-title"><div><h2 id="shortcuts-title">What’s next?</h2><p>Explore the tools taking shape.</p></div><nav aria-label="Business shortcuts">{shortcuts.map(item => <Link key={item.path} to={item.path}>{item.label}<ArrowUpRight size={13} aria-hidden="true" /></Link>)}</nav></section>
-    </div>
-  )
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/forms'
+import { PageHeader, LoadingState, ErrorState, EmptyState } from '@/components/ui/display'
+export function DashboardPage() { const { active } = useBusiness(); return active ? <Dashboard key={active.id} business={active.id} /> : null }
+const metrics = { invoiced: 'Ausgestellte Rechnungen', received: 'Zahlungseingänge', outstanding: 'Offene Forderungen', expenses: 'Erfasste Ausgaben', paidExpenses: 'Bezahlte Ausgaben', openExpenses: 'Offene Ausgaben' } as const
+function Dashboard({ business }: { business: string }) {
+  const [to, setTo] = useState(localToday); const [from, setFrom] = useState(() => `${localToday().slice(0, 4)}-01-01`)
+  const resource = useExpenseResource(useCallback(() => financeOverview(business, from, to), [business, from, to]))
+  return <div className="page-content"><PageHeader title="Deine Finanzen im Überblick" description="Rechnungen und tatsächliche Zahlungen getrennt betrachtet · CHF" meta={<div className="page-actions"><Link className="button button--secondary" to="/invoices">Rechnungen</Link><Link className="button button--primary" to="/expenses/new">Neue Ausgabe</Link></div>} />
+    <div className="customer-toolbar"><label>Von<Input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label><label>Bis<Input type="date" value={to} onChange={e => setTo(e.target.value)} /></label></div>
+    {resource.status === 'loading' && <LoadingState label="Kennzahlen werden geladen…" />}{resource.status === 'error' && <ErrorState description="Kennzahlen nicht verfügbar. Bitte prüfe den Zeitraum (maximal fünf Jahre)." action={<Button onClick={() => void resource.store.load()}>Erneut laden</Button>} />}
+    {resource.data && <FinanceOverview data={resource.data} />}
+  </div>
+}
+export function FinanceOverview({ data }: { data: Finance }) {
+  const cents = (value: string) => BigInt(value.replace('.', ''))
+  const max = data.months.reduce((a, x) => [cents(x.received), cents(x.paidExpenses)].reduce((b, n) => n > b ? n : b, a), 1n)
+  return <><div className="metrics-grid expense-metrics">{Object.entries(metrics).map(([key, label]) => <MetricCard key={key} label={label} value={formatPrice(data.totals[key as keyof typeof metrics], 'CHF')} context={key === 'received' || key === 'paidExpenses' ? 'Nach Zahlungsdatum · ohne Korrekturen' : 'Nach Belegdatum · aktueller Stand ohne Stornos'} />)}</div>
+    <section className="surface expense-panel"><h2>Monatliche Zahlungen</h2><p className="field-hint">Zahlungseingänge und bezahlte Ausgaben · CHF</p>
+      {data.months.every(x => cents(x.received) === 0n && cents(x.paidExpenses) === 0n) ? <EmptyState title="Noch keine Zahlungen im Zeitraum" description="Erfasste Zahlungseingänge und bezahlte Ausgaben erscheinen hier." /> : <div className="finance-chart">{data.months.map(month => <div key={month.month} className="finance-month"><strong>{month.month}</strong><div><span>Eingänge {formatPrice(month.received, 'CHF')}</span><div className="finance-bar income" style={{ width: `${Number(cents(month.received) * 10000n / max) / 100}%` }} /></div><div><span>Ausgaben {formatPrice(month.paidExpenses, 'CHF')}</span><div className="finance-bar expense" style={{ width: `${Number(cents(month.paidExpenses) * 10000n / max) / 100}%` }} /></div></div>)}</div>}
+    </section><p className="information-panel">Nur CHF-Belege, keine Währungsumrechnung. Offene Beträge zeigen den aktuellen Stand der im Zeitraum ausgestellten Belege, keinen historischen Stichtag. Diese vereinfachte Übersicht ist weder steuerlicher Gewinn noch vollständiger Cashflow oder MWST-Abrechnung.</p></>
 }

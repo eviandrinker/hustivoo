@@ -92,3 +92,35 @@ export async function requestBlob(path: string, contentType: string, signal?: Ab
   if (!response.headers.get('content-type')?.startsWith(contentType)) throw new Error('Unexpected response')
   return response.blob()
 }
+
+/** Multipart upload with real progress, sharing the existing CSRF/session/error policy. */
+export async function uploadFile(path: string, file: File, progress: (percent: number) => void, signal?: AbortSignal): Promise<unknown> {
+  if (!path.startsWith('/api/')) throw new Error('Expected a relative API path')
+  await refreshCsrf()
+  if (!csrf) throw new Error('Unable to initialize request')
+  const token = csrf
+  signal?.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    xhr.open('POST', path); xhr.timeout = 120_000
+    xhr.setRequestHeader('Accept', 'application/json'); xhr.setRequestHeader(token.headerName, token.token)
+    xhr.upload.onprogress = event => { if (event.lengthComputable) progress(Math.round(event.loaded / event.total * 100)) }
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        void fail(new Response(xhr.responseText, { status: xhr.status }), path).catch(reject)
+        return
+      }
+      try {
+        if (!xhr.getResponseHeader('Content-Type')?.includes('application/json')) throw new Error('Unexpected response')
+        resolve(JSON.parse(xhr.responseText))
+      } catch (error) { reject(error) }
+    }
+    xhr.onerror = () => reject(new Error('Upload failed'))
+    xhr.ontimeout = () => reject(new Error('Upload timed out'))
+    xhr.onabort = () => reject(new DOMException('Aborted', 'AbortError'))
+    xhr.onloadend = () => signal?.removeEventListener('abort', abort)
+    signal?.addEventListener('abort', abort, { once: true })
+    const body = new FormData(); body.append('file', file); xhr.send(body)
+  })
+}
